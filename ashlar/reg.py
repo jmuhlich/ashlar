@@ -922,7 +922,7 @@ class Mosaic(object):
     def __init__(
             self, aligner, shape, filename_format, channels=None,
             ffp_path=None, dfp_path=None, combined=False, tile_size=None,
-            first=False, verbose=False
+            separate_series=False, first=False, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
@@ -930,6 +930,9 @@ class Mosaic(object):
         self.channels = self._sanitize_channels(channels)
         self.combined = combined
         self.tile_size = tile_size
+        # FIXME: The implementation of this feature is very hacky and should be
+        # completely redesigned.
+        self.separate_series = separate_series
         self.first = first
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
@@ -1014,6 +1017,8 @@ class Mosaic(object):
     def run(self, mode='write', debug=False):
         if mode not in ('write', 'return'):
             raise ValueError('Invalid mode')
+        if self.separate_series and debug:
+            raise ValueError("Debug mode can't be used with separate_series")
         num_tiles = len(self.aligner.positions)
         all_images = []
         if debug:
@@ -1025,9 +1030,15 @@ class Mosaic(object):
             if self.verbose:
                 print('    Channel %d:' % channel)
             if not debug:
-                mosaic_image = np.zeros(self.shape, self.dtype)
+                if not self.separate_series:
+                    mosaic_image = np.zeros(self.shape, self.dtype)
+                    func = utils.pastefunc_blend
+                else:
+                    series_images = []
+                    func = None
             else:
                 mosaic_image = np.zeros(self.shape + (3,), np.float32)
+                func = np.add
             for tile, position in enumerate(self.aligner.positions):
                 if self.verbose:
                     sys.stdout.write('\r        merging tile %d/%d'
@@ -1041,8 +1052,11 @@ class Mosaic(object):
                                          tile_image.dtype)
                     rgb_image[:,:,color_channel] = tile_image
                     tile_image = rgb_image
-                func = utils.pastefunc_blend if not debug else np.add
+                if self.separate_series:
+                    mosaic_image = np.zeros_like(tile_image)
                 utils.paste(mosaic_image, tile_image, position, func=func)
+                if self.separate_series:
+                    series_images.append(mosaic_image)
             if debug:
                 np.clip(mosaic_image, 0, 1, out=mosaic_image)
                 w = int(1e6)
@@ -1076,10 +1090,25 @@ class Mosaic(object):
                         kwargs['append'] = True
                 if self.tile_size:
                     kwargs['tile'] = (self.tile_size, self.tile_size)
-                if self.verbose:
-                    print("        writing to %s" % filename)
-                utils.imsave(filename, mosaic_image, **kwargs)
+                if not self.separate_series:
+                    if self.verbose:
+                        print("        writing to %s" % filename)
+                    utils.imsave(filename, mosaic_image, **kwargs)
+                else:
+                    n = len(series_images)
+                    digits = max(int(np.ceil(np.log10(n))), 1)
+                    suffix = ''.join(pathlib.Path(filename).suffixes)
+                    base = filename[:-len(suffix)]
+                    for i, s_img in enumerate(series_images):
+                        s_filename = '{base}_{i:0{digits}}{suffix}'.format(
+                            base=base, i=i, digits=digits, suffix=suffix
+                        )
+                        if self.verbose:
+                            print("        writing to %s" % s_filename)
+                        utils.imsave(s_filename, s_img, **kwargs)
             elif mode == 'return':
+                if self.separate_series:
+                    mosaic_image = series_images
                 all_images.append(mosaic_image)
         if mode == 'return':
             return all_images
