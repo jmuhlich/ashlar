@@ -118,10 +118,10 @@ class RegistrationProcess(object):
         alignment = align.register_planes(intersection1, intersection2)
         return alignment.error
 
-    def neighbor_intersection_tasks(self):
+    def neighbor_alignment_tasks(self):
         return self.graph.edges
 
-    def compute_neighbor_intersection(self, a, b):
+    def compute_neighbor_alignment(self, a, b):
         plane1 = self.get_tile(a).plane
         plane2 = self.get_tile(b).plane
         intersection1 = plane1.intersection(plane2, self.overlap_minimum_size)
