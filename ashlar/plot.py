@@ -62,6 +62,30 @@ class RegistrationProcessPlotter(object):
         ax.set_aspect('equal')
 
 
+@attr.s(frozen=True)
+class RegistrationProcessExecutorPlotter(object):
+    """RegistrationProcessExecutor plotting helper"""
+
+    executor = attr.ib()
+
+    def __call__(self, **kwargs):
+        self.spanning_tree(**kwargs)
+
+    def spanning_tree(self, ax=None, **kwargs):
+        """Draw the spanning_tree graph using the tile centers for layout."""
+        defaults = dict(
+            font_size=6, node_size=100, node_color='orange'
+        )
+        for k, v in defaults.items():
+            kwargs.setdefault(k, v)
+        g = self.executor.spanning_tree_
+        pos = np.fliplr(self.executor.process.tileset.centers)
+        if ax is None:
+            ax = plt.gca()
+        nx.draw_networkx(g, ax=ax, pos=pos, with_labels=True, **kwargs)
+        ax.set_aspect('equal')
+
+
 def draw_rectangle(rect, ax=None, **kwargs):
     defaults = dict(color='black', fill=False, lw=0.5)
     for k, v in defaults.items():

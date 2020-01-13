@@ -7,20 +7,21 @@ import numpy as np
 import scipy.ndimage as ndimage
 import skimage.feature
 import skimage.filters
+import skimage.restoration
 
 from . import geometry
 from .util import cached_property
 
 
-@attr.s
+@attr.s(frozen=True)
 class PlaneAlignment(object):
     shift = attr.ib(validator=av.instance_of(geometry.Vector))
     error = attr.ib()
 
 
-@attr.s
+@attr.s(frozen=True)
 class EdgeTileAlignment(object):
-    alignment = attr.ib(validator=av.instance_of(PlaneAlignment))
+    plane_alignment = attr.ib(validator=av.instance_of(PlaneAlignment))
     tile_index_1 = attr.ib()
     tile_index_2 = attr.ib()
 
@@ -29,11 +30,11 @@ class EdgeTileAlignment(object):
         if self.tile_index_1 > self.tile_index_2:
             t1 = self.tile_index_1
             t2 = self.tile_index_2
-            new_shift = -self.alignment.shift
-            new_alignment = attr.evolve(self.alignment, shift=new_shift)
+            new_shift = -self.plane_alignment.shift
+            new_alignment = attr.evolve(self.plane_alignment, shift=new_shift)
             object.__setattr__(self, 'tile_index_1', t2)
             object.__setattr__(self, 'tile_index_2', t1)
-            object.__setattr__(self, 'alignment', new_alignment)
+            object.__setattr__(self, 'plane_alignment', new_alignment)
 
     @cached_property
     def tile_indexes(self):
@@ -42,11 +43,19 @@ class EdgeTileAlignment(object):
     def get_shift(self, index):
         """Return the shift from the "perspective" of tile `index`."""
         if index == self.tile_index_1:
-            return -self.alignment.shift
+            return -self.plane_alignment.shift
         elif index == self.tile_index_2:
-            return self.alignment.shift
+            return self.plane_alignment.shift
         else:
             raise ValueError("Invalid tile index")
+
+    @property
+    def shift(self):
+        return self.plane_alignment.shift
+
+    @property
+    def error(self):
+        return self.plane_alignment.error
 
 
 def register_planes(plane1, plane2):
@@ -87,7 +96,10 @@ def register(img1, img2, upsample_factor=10):
     shift_pos = (shift + shape) % shape
     shift_neg = shift_pos - shape
     shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
-    correlations = [np.sum(img1w * ndimage.shift(img2w, s)) for s in shifts]
+    correlations = [
+        np.sum(img1w * ndimage.shift(img2w, np.rint(s)))
+        for s in shifts
+    ]
     idx = np.argmax(correlations)
     shift = np.array(shifts[idx])
     correlation = correlations[idx]
@@ -99,6 +111,9 @@ def register(img1, img2, upsample_factor=10):
     return shift, error
 
 
+# Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
+_laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
+
 def whiten(img, sigma=0.0):
     """Return a spectrally whitened copy of an image with optional smoothing.
 
@@ -109,6 +124,37 @@ def whiten(img, sigma=0.0):
     """
     output = np.empty_like(img, dtype=np.complex64)
     img = skimage.img_as_float(img)
-    ndimage.filters.gaussian_laplace(img, sigma=sigma, output=output.real)
+    if sigma == 0:
+        ndimage.convolve(img, _laplace_kernel, output.real)
+    else:
+        ndimage.gaussian_laplace(img, sigma, output=output.real)
     output.imag[:] = 0
+    return output
+
+
+def ishift(input, shift):
+    sy = input.shape[0] - shift[0]
+    sx = input.shape[1] - shift[1]
+    if shift[0] >= 0:
+        iy1 = 0
+        iy2 = sy
+        oy1 = shift[0]
+        oy2 = input.shape[0]
+    else:
+        iy1 = shift[0]
+        iy2 = input.shape[0]
+        oy1 = 0
+        oy2 = sy
+    if shift[1] >= 0:
+        ix1 = 0
+        ix2 = sx
+        ox1 = shift[1]
+        ox2 = input.shape[1]
+    else:
+        ix1 = shift[1]
+        ix2 = input.shape[1]
+        ox1 = 0
+        ox2 = sx
+    output = np.zeros_like(input)
+    output[oy1:oy2, ox1:ox2] = input[oy1:oy2, ox1:ox2]
     return output

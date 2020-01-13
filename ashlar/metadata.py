@@ -107,6 +107,14 @@ class TileSet(object):
         tile = Tile(plane, tile_number, channel)
         return tile
 
+    def flip(self, flip_y=False, flip_x=False):
+        """Return TileSet with positions flipped about one or both axes."""
+        sy = -1 if flip_y else 1
+        sx = -1 if flip_x else 1
+        new_positions = self.positions * [sy, sx]
+        ts = attr.evolve(self, positions=new_positions)
+        return ts
+
     def __len__(self):
         return len(self.positions)
 

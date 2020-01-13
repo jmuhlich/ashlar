@@ -72,3 +72,16 @@ def future_progress(futures, batch_size=1):
         results.append(f.result())
     print()
     return results
+
+
+class SerialExecutor(concurrent.futures.Executor):
+    """Execute tasks in serial (immediately on submission)"""
+    def submit(self, fn, *args, **kwargs):
+        f = concurrent.futures.Future()
+        try:
+            result = fn(*args, **kwargs)
+        except BaseException as e:
+            f.set_exception(e)
+        else:
+            f.set_result(result)
+        return f
