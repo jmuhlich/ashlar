@@ -124,12 +124,18 @@ def fourier_shift(img, shift):
     return img_s.real
 
 
-def paste(target, img, pos, func=None):
+def paste(target, img, pos, angle=0, func=None):
     """Composite img into target."""
     pos = np.array(pos)
     # Bail out if destination region is out of bounds.
     if np.any(pos >= target.shape[:2]) or np.any(pos + img.shape[:2] < 0):
         return
+    # Rotate img if necessary.
+    if angle != 0:
+        orig_shape = img.shape
+        img = skimage.transform.rotate(img, angle, resize=True)
+        shape_diff = (np.array(img.shape) - orig_shape)[:2]
+        pos = np.round(pos - shape_diff / 2)
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -176,6 +182,13 @@ def pastefunc_blend(target, img):
         alpha = 0
     else:
         alpha = dist / dist.max()
+        # Keep target pixel values where img has value 0 (with a 1-pixel
+        # dilation to clean up the edge). This is a workaround to support
+        # rotation correction, which leaves large triangular regions of 0 pixels
+        # around the edge of img. We should handle this more robustly if/when
+        # the rotation support is merged. What should happen if a normal image
+        # happens to have some zeros, or even a large region of zeros?
+        alpha[skimage.morphology.binary_dilation(img == 0)] = 1
     return target * alpha + img * (1 - alpha)
 
 

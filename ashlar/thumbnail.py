@@ -24,7 +24,7 @@ def make_thumbnail(reader, channel=0, scale=0.05):
         # images are bigger than the scale factor. This speeds up the rescaling
         # dramatically.
         img_s = rescale(img, scale, multichannel=False, anti_aliasing=False)
-        utils.paste(mosaic, img_s, positions[i] * scale, np.maximum)
+        utils.paste(mosaic, img_s, positions[i] * scale, func=np.maximum)
     print()
     return mosaic
 

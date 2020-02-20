@@ -60,7 +60,7 @@ def main(argv=sys.argv):
             img = (np.log(np.maximum(img, 1)) * scale).astype(np.uint16)
         # Round position so paste will skip the expensive subpixel shift.
         pos = np.round(positions[i])
-        utils.paste(mosaic, img, pos, np.maximum)
+        utils.paste(mosaic, img, pos, func=np.maximum)
     print()
 
     ax = plt.gca()

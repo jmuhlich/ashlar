@@ -29,6 +29,7 @@ except ImportError:
     modest_image = None
 from . import utils
 from . import thumbnail
+from .transform import polar2cart
 from . import __version__ as _version
 
 # Patch np.fft to use pyfftw so skimage utilities can benefit.
@@ -733,7 +734,7 @@ class EdgeAligner(object):
 class LayerAligner(object):
 
     def __init__(self, reader, reference_aligner, channel=None, max_shift=15,
-                 filter_sigma=0.0, verbose=False):
+                 max_rotation_dev=None, filter_sigma=0.0, verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
         if channel is None:
@@ -742,6 +743,7 @@ class LayerAligner(object):
         # Unit is micrometers.
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
+        self.max_rotation_dev = max_rotation_dev
         self.filter_sigma = filter_sigma
         self.verbose = verbose
         # FIXME Still a bit muddled here on the use of metadata positions vs.
@@ -778,13 +780,15 @@ class LayerAligner(object):
     def register_all(self):
         n = self.metadata.num_images
         self.shifts = np.empty((n, 2))
+        self.angles = np.empty(n)
         self.errors = np.empty(n)
         for i in range(n):
             if self.verbose:
                 sys.stdout.write("\r    aligning tile %d/%d" % (i + 1, n))
                 sys.stdout.flush()
-            shift, error = self.register(i)
+            shift, angle, error = self.register(i)
             self.shifts[i] = shift
+            self.angles[i] = angle
             self.errors[i] = error
         if self.verbose:
             print()
@@ -798,6 +802,7 @@ class LayerAligner(object):
         )
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
+        self.constrain_angles()
 
     def constrain_positions(self):
         # Discard camera background registration which will shift target
@@ -836,15 +841,55 @@ class LayerAligner(object):
         # Fill in discarded shifts from the predictions.
         self.positions[discard] = predictions[discard] + self.offset
 
+    def constrain_angles(self):
+        # Set out-of-range angles to median of in-range angles.
+        median_angle = np.nan_to_num(np.median(self.angles))
+        min_angle = median_angle - self.max_rotation_dev
+        max_angle = median_angle + self.max_rotation_dev
+        extremes = (self.angles < min_angle) | (self.angles > max_angle)
+        self.angles[extremes] = np.nan_to_num(np.median(self.angles[~extremes]))
+
     def register(self, t):
-        """Return relative shift between images and the alignment error."""
+        """Return relative shift/angle between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
         if np.any(np.array(its.shape) == 0):
             return (0, 0), np.inf
+
+        if self.max_rotation_dev is not None:
+            window_y = np.hanning(ref_img.shape[0])[..., None]
+            window_x = np.hanning(ref_img.shape[1])[..., None]
+            window = window_y * window_x.T
+            a = np.clip(polar2cart(np.fft.fftshift(np.fft.ifft2(np.abs(np.fft.fft2(ref_img*window))).real)*window),0,None)
+            b = np.clip(polar2cart(np.fft.fftshift(np.fft.ifft2(np.abs(np.fft.fft2(img*window))).real)*window),0,None)
+            (angle, _), _, _ = skimage.feature.register_translation(
+                utils.whiten(a, self.filter_sigma)*window, utils.whiten(b, self.filter_sigma)*window, 10
+            )
+            angle = angle / a.shape[0] * 360
+            img = skimage.transform.rotate(img, angle)
+            ref_img = ref_img * window
+            img *= window
+        else:
+            angle = 0.0
+
         shift, error = utils.register(ref_img, img, self.filter_sigma)
+
+        if angle != 0.0:
+            # Add shift due to different centers of rotation here (center of
+            # overlap) vs. mosaicing (center of image).
+            center_i = self.metadata.size / 2
+            center_o = its.offsets[1] + its.shape / 2
+            v = center_o - center_i
+            # Angle is inverted since image rotation was computed based on a
+            # coordinate system with Y flipped.
+            cos_a = np.cos(np.deg2rad(-angle))
+            sin_a = np.sin(np.deg2rad(-angle))
+            R = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+            v_rotated = np.dot(R, v)
+            shift += v_rotated - v
+
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
-        return shift, error
+        return shift, angle, error
 
     def intersection(self, t):
         corners1 = np.vstack([self.reference_positions[t],
@@ -870,7 +915,7 @@ class LayerAligner(object):
         return self.reader.metadata
 
     def debug(self, t):
-        shift, _ = self.register(t)
+        shift, angle, _ = self.register(t)
         its, o1, o2 = self.overlap(t)
         w1 = utils.whiten(o1, self.filter_sigma)
         w2 = utils.whiten(o2, self.filter_sigma)
@@ -1041,8 +1086,9 @@ class Mosaic(object):
                                          tile_image.dtype)
                     rgb_image[:,:,color_channel] = tile_image
                     tile_image = rgb_image
+                angle = self.aligner.angles[tile] if hasattr(self.aligner, "angles") else 0
                 func = utils.pastefunc_blend if not debug else np.add
-                utils.paste(mosaic_image, tile_image, position, func=func)
+                utils.paste(mosaic_image, tile_image, position, angle, func=func)
             if debug:
                 np.clip(mosaic_image, 0, 1, out=mosaic_image)
                 w = int(1e6)
