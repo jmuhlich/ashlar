@@ -843,6 +843,8 @@ class LayerAligner(object):
 
     def constrain_angles(self):
         # Set out-of-range angles to median of in-range angles.
+        if self.max_rotation_dev is None:
+            return
         median_angle = np.nan_to_num(np.median(self.angles))
         min_angle = median_angle - self.max_rotation_dev
         max_angle = median_angle + self.max_rotation_dev
