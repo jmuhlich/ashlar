@@ -233,7 +233,7 @@ class RegistrationProcessExecutor(object):
         )
 
     def _execute(self, fn, task_args):
-        progress = util.future_progress if self.verbose else list
+        progress = util.future_progress if self.verbose else util.future_results
         futures = util.executor_submit(self.pool, fn, task_args)
         results = progress(futures)
         return results
