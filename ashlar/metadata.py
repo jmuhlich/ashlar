@@ -23,6 +23,28 @@ class ImageReader(util.ABC):
 
 
 @attr.s(frozen=True)
+class ImageSubsetReader(ImageReader):
+    """ImageReader proxy for a subset of tiles from another ImageReader"""
+    _reader = attr.ib(validator=attr.validators.instance_of(ImageReader))
+    image_numbers = attr.ib(converter=util.array_copy_immutable)
+
+    @classmethod
+    def from_reader(cls, reader, image_numbers):
+        subset_reader = cls(
+            reader.dtype,
+            reader.pixel_size,
+            reader.num_channels,
+            reader,
+            image_numbers
+        )
+        return subset_reader
+
+    def read(self, image_number, channel):
+        actual_image_number = self.image_numbers[image_number]
+        return self._reader.read(actual_image_number, channel)
+
+
+@attr.s(frozen=True)
 class TileSet(object):
     """Physical layout of a list of image tiles and access to their pixels.
 
@@ -114,6 +136,15 @@ class TileSet(object):
         new_positions = self.positions * [sy, sx]
         ts = attr.evolve(self, positions=new_positions)
         return ts
+
+    def subset(self, tile_numbers):
+        """Return TileSet corresponding to only the given tile numbers."""
+        tile_numbers = np.array(tile_numbers)
+        if (tile_numbers < 0).any() or (tile_numbers >= len(self)).any():
+            raise ValueError("Tile number out of range")
+        positions = self.positions[tile_numbers]
+        reader = ImageSubsetReader.from_reader(self._reader, tile_numbers)
+        return TileSet(self.tile_shape, positions, reader)
 
     def __len__(self):
         return len(self.positions)
