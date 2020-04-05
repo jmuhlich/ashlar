@@ -41,6 +41,11 @@ class RegistrationProcess(object):
         converter=int,
         doc="Index of imaging channel to use for registration."
     )
+    filter_sigma = attrib(
+        default=0.0, converter=float,
+        validator=util.validate_nonnegative(),
+        doc="Width of Gaussian filter to apply to images before alignment."
+    )
     neighbor_overlap_cutoff = attrib(
         default=50, converter=float,
         validator=util.validate_range(0, 100),
@@ -120,7 +125,9 @@ class RegistrationProcess(object):
         plane2 = attr.evolve(plane2, bounds=new_b_bounds)
         intersection1 = plane1.intersection(plane2, self.overlap_minimum_size)
         intersection2 = plane2.intersection(plane1, self.overlap_minimum_size)
-        alignment = align.register_planes(intersection1, intersection2)
+        alignment = align.register_planes(
+            intersection1, intersection2, self.filter_sigma
+        )
         return alignment.error
 
     def compute_error_threshold(self, neighbor_permutation_errors):
@@ -138,7 +145,9 @@ class RegistrationProcess(object):
         plane2 = self.get_tile(b).plane
         intersection1 = plane1.intersection(plane2, self.overlap_minimum_size)
         intersection2 = plane2.intersection(plane1, self.overlap_minimum_size)
-        alignment = align.register_planes(intersection1, intersection2)
+        alignment = align.register_planes(
+            intersection1, intersection2, self.filter_sigma
+        )
         return align.EdgeTileAlignment(alignment, a, b)
 
     def compute_spanning_tree(self, alignments, error_threshold):

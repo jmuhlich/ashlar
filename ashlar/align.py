@@ -4,6 +4,7 @@ import threading
 import attr
 import attr.validators as av
 import numpy as np
+import scipy.fft
 import scipy.ndimage as ndimage
 import skimage.feature
 import skimage.filters
@@ -58,20 +59,20 @@ class EdgeTileAlignment(object):
         return self.plane_alignment.error
 
 
-def register_planes(plane1, plane2):
+def register_planes(plane1, plane2, sigma):
     if plane1.pixel_size != plane2.pixel_size:
         raise ValueError("planes have different pixel sizes")
     if plane1.bounds.shape != plane2.bounds.shape:
         raise ValueError("planes have different shapes")
     if plane1.bounds.area == 0:
         raise ValueError("planes are empty")
-    shift_pixels, error = register(plane1.image, plane2.image)
+    shift_pixels, error = register(plane1.image, plane2.image, sigma)
     shift = geometry.Vector.from_ndarray(shift_pixels) * plane1.pixel_size
     shift_adjusted = shift + (plane1.bounds.vector1 - plane2.bounds.vector1)
     return PlaneAlignment(shift_adjusted, error)
 
 
-def register(img1, img2, upsample_factor=10):
+def register(img1, img2, sigma, upsample_factor=10):
     """Return translation shift from img2 to img2 and an error metric.
 
     This function wraps skimage registration to apply our conventions and
@@ -80,12 +81,10 @@ def register(img1, img2, upsample_factor=10):
     (to us) error metric.
 
     """
-    img1w = whiten(img1)
-    img2w = whiten(img2)
-    img1_f = np.fft.fft2(img1w)
-    img2_f = np.fft.fft2(img2w)
-    img1w = img1w.real
-    img2w = img2w.real
+    img1w = whiten(img1, sigma)
+    img2w = whiten(img2, sigma)
+    img1_f = scipy.fft.fft2(img1w)
+    img2_f = scipy.fft.fft2(img2w)
     shift, _, _ = skimage.feature.register_translation(
         img1_f, img2_f, upsample_factor, 'fourier'
     )
@@ -97,7 +96,7 @@ def register(img1, img2, upsample_factor=10):
     shift_neg = shift_pos - shape
     shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
     correlations = [
-        np.sum(img1w * ndimage.shift(img2w, np.rint(s)))
+        np.abs(np.sum(img1w * ishift(img2w, s)))
         for s in shifts
     ]
     idx = np.argmax(correlations)
@@ -105,7 +104,7 @@ def register(img1, img2, upsample_factor=10):
     correlation = correlations[idx]
     total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
     if correlation > 0 and total_amplitude > 0:
-        error = -np.log(correlation / total_amplitude)
+        error = max(-np.log(correlation / total_amplitude), 0.0)
     else:
         error = np.inf
     return shift, error
@@ -114,47 +113,32 @@ def register(img1, img2, upsample_factor=10):
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
 _laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
 
-def whiten(img, sigma=0.0):
+def whiten(img, sigma=0):
     """Return a spectrally whitened copy of an image with optional smoothing.
 
-    Uses Laplacian of Gaussian with the given sigma. Returns a complex64 output
-    with the whitened image in the real component and zero in the imaginary
-    component. (This allows the result to be used directly in FFT operations)
+    Uses Laplacian of Gaussian with the given sigma, or just a Laplacian if
+    sigma is 0. Returns a float32 array containing the whitened image.
 
     """
-    output = np.empty_like(img, dtype=np.complex64)
-    img = skimage.img_as_float(img)
+    output = np.empty_like(img, dtype=np.float32)
     if sigma == 0:
-        ndimage.convolve(img, _laplace_kernel, output.real)
+        ndimage.convolve(img, _laplace_kernel, output)
     else:
-        ndimage.gaussian_laplace(img, sigma, output=output.real)
-    output.imag[:] = 0
+        ndimage.gaussian_laplace(img, sigma, output=output)
     return output
 
 
-def ishift(input, shift):
-    sy = input.shape[0] - shift[0]
-    sx = input.shape[1] - shift[1]
-    if shift[0] >= 0:
-        iy1 = 0
-        iy2 = sy
-        oy1 = shift[0]
-        oy2 = input.shape[0]
-    else:
-        iy1 = shift[0]
-        iy2 = input.shape[0]
-        oy1 = 0
-        oy2 = sy
-    if shift[1] >= 0:
-        ix1 = 0
-        ix2 = sx
-        ox1 = shift[1]
-        ox2 = input.shape[1]
-    else:
-        ix1 = shift[1]
-        ix2 = input.shape[1]
-        ox1 = 0
-        ox2 = sx
-    output = np.zeros_like(input)
-    output[oy1:oy2, ox1:ox2] = input[oy1:oy2, ox1:ox2]
-    return output
+def ishift(img, shift):
+    shift = np.rint(shift).astype(int)
+    pshift = np.minimum(np.abs(shift), img.shape)
+    iy1, ix1 = 0, 0
+    iy2, ix2 = img.shape - pshift
+    oy1, ox1 = pshift
+    oy2, ox2 = img.shape
+    if shift[0] < 0:
+        iy1, iy2, oy1, oy2 = oy1, oy2, iy1, iy2
+    if shift[1] < 0:
+        ix1, ix2, ox1, ox2 = ox1, ox2, ix1, ix2
+    out = np.zeros_like(img)
+    out[oy1:oy2, ox1:ox2] = img[iy1:iy2, ix1:ix2]
+    return out

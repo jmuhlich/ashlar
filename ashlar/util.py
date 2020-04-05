@@ -30,6 +30,14 @@ def validate_range(rmin, rmax):
     return validate
 
 
+def validate_nonnegative():
+    """attrs validator -- value must be >= 0."""
+    def validate(self, attribute, value):
+        if value < 0:
+            raise ValueError(f"{attribute.name} must be non-negative")
+    return validate
+
+
 def attrib(doc=None, **kwargs):
     """Wrapper for attr.ib with docstring support via the 'doc' argument."""
     if doc is not None:
