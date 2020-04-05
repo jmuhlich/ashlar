@@ -3,6 +3,7 @@ import functools
 import concurrent.futures
 import numpy as np
 import attr
+import tqdm
 
 
 # Abstract base class compatible with both Python 2 and 3.
@@ -62,15 +63,13 @@ def future_results(futures):
     return [f.result() for f in futures]
 
 
-def future_progress(futures, batch_size=1):
+def future_progress(futures):
     """Return results for a list of futures, with progress reporting."""
     n = len(futures)
-    results = []
-    for i, f in enumerate(concurrent.futures.as_completed(futures), 1):
-        if i % batch_size == 0 or i == n:
-            print(f"\r{i}/{n}", end="", flush=True)
-        results.append(f.result())
-    print()
+    it = concurrent.futures.as_completed(futures)
+    results = [
+        f.result() for f in tqdm.tqdm(it, total=n, ncols=60)
+    ]
     return results
 
 
