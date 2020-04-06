@@ -167,6 +167,10 @@ class BioformatsReader(object):
             length_as_microns(q, "stage coordinates") for q in quantities
         ]
         position = np.array(values, dtype=float)
+        # Almost all instruments seem to have the Y axis flipped between the
+        # stage and the images, so we'll adapt to that convention. TileSet.flip
+        # can be used to handle non-conforming datasets.
+        position *= [-1, 1]
         return position
 
     @cached_property
