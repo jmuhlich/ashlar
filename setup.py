@@ -12,17 +12,15 @@ from setuptools.command.build_py import build_py
 import versioneer
 
 requires = [
-    'numpy>=1.13.0',
-    'future>=0.16.0',
-    'cython>=0.27.3',
-    'pyjnius==1.2.0',
-    'matplotlib>=2.1.0',
-    'networkx>=2.0',
-    'pyfftw>=0.10.4',
-    'scipy>=0.19.1',
-    'scikit-image>=0.14.0',
-    'scikit-learn>=0.19.1',
-    'attrs>=18.2.0',
+    'numpy>=1.18.1',
+    'cython>=0.29.14',
+    'pyjnius>=1.2.1',
+    'matplotlib>=3.1.2',
+    'networkx>=2.4',
+    'scipy>=1.4.1',
+    'scikit-image>=0.16.2',
+    'scikit-learn>=0.22.2',
+    'attrs>=19.3.0',
 ]
 
 
@@ -48,8 +46,8 @@ AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
-LOCI_TOOLS_URL = 'http://downloads.openmicroscopy.org/bio-formats/5.9.2/artifacts/loci_tools.jar'
-LOCI_TOOLS_SHA1 = 'fbe2635b5580a5abd312979f5f3a70c953d4e613'
+LOCI_TOOLS_URL = 'https://downloads.openmicroscopy.org/bio-formats/6.4.0/artifacts/loci_tools.jar'
+LOCI_TOOLS_SHA1 = 'f47c35240a8ee0dd4c2eb928494cc254de913dd6'
 
 def download_bioformats():
     print("Ensuring latest bioformats is present:")
@@ -104,13 +102,11 @@ setup(
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/x-rst',
     cmdclass=versioneer.get_cmdclass(cmdclass),
     packages=find_packages(),
     include_package_data=True,
     install_requires=requires,
-    extras_require={
-        ':python_version <= "3.3"': ['pathlib2'],
-    },
     entry_points={
         'console_scripts': [
             'ashlar=ashlar.scripts.ashlar:main',
@@ -125,7 +121,6 @@ setup(
         'License :: OSI Approved :: %s' % LICENSE,
         'Natural Language :: English',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Visualization'
     ],

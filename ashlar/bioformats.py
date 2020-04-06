@@ -19,28 +19,25 @@ if not jnius_config.vm_running:
         raise RuntimeError("loci_tools.jar missing from distribution"
                            " (expected it at %s)" % bf_jar_path)
     jnius_config.add_classpath(str(bf_jar_path))
+    # Prevent Kryo serialization library from triggering warnings on Java 9+.
+    jnius_config.add_options("--illegal-access=deny")
 import jnius
 
 
-JString = jnius.autoclass('java.lang.String')
 File = jnius.autoclass('java.io.File')
 DebugTools = jnius.autoclass('loci.common.DebugTools')
 IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
 Memoizer = jnius.autoclass('loci.formats.Memoizer')
-MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
+MetadataRetrieve = jnius.autoclass('ome.xml.meta.MetadataRetrieve')
 ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
 OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 UNITS = jnius.autoclass('ome.units.UNITS')
-
-
-# Work around pyjnius #300. Passing a python string directly here corrupts the
-# value under Python 3, but explicitly converting it into a Java string works.
-DebugTools.enableLogging(JString("ERROR"))
+DebugTools.enableLogging("ERROR")
 
 pixel_dtypes = {
-    'uint8': np.uint8,
-    'uint16': np.uint16,
+    'uint8': np.dtype(np.uint8),
+    'uint16': np.dtype(np.uint16),
 }
 ome_dtypes = {v: k for k, v in pixel_dtypes.items()}
 
@@ -62,8 +59,8 @@ class BioformatsReader(object):
         bf_metadata = service.createOMEXMLMetadata()
         bf_reader = cls.get_bf_reader(cache_directory)
         bf_reader.setMetadataStore(bf_metadata)
-        # FIXME Workaround for pyjnius #300.
-        bf_reader.setId(JString(str(path)))
+        bf_reader.setId(path)
+        bf_metadata = jnius.cast(MetadataRetrieve, bf_metadata)
         return cls(path, bf_reader, bf_metadata, cache_directory)
 
     @classmethod
@@ -72,7 +69,7 @@ class BioformatsReader(object):
         if cache_directory is None:
             bf_reader = ChannelSeparator()
         else:
-            memo_dir = File(JString(str(cache_directory)))
+            memo_dir = File(cache_directory)
             bf_reader = Memoizer(ChannelSeparator(), 0, memo_dir)
         return bf_reader
 
@@ -89,7 +86,7 @@ class BioformatsReader(object):
         except AttributeError:
             bf_reader = self.get_bf_reader(self.cache_directory)
             self._thread_local.bf_reader = bf_reader
-            bf_reader.setId(JString(str(self.path)))
+            bf_reader.setId(self.path)
         return bf_reader
 
     @cached_property
