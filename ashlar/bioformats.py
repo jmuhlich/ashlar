@@ -122,11 +122,11 @@ class BioformatsReader(object):
             self.bf_metadata.getPixelsPhysicalSizeX(0)
         ]
         values = [
-            length_as_microns(q, "pixel size") for q in quantities
+            length_as_microns(q, "pixel size", fallback=1) for q in quantities
         ]
         if values[0] != values[1]:
             raise ValueError(
-                "can't handle non-square pixels: ({}, {})".format(values)
+                f"can't handle non-square pixels: {tuple(values)}"
             )
         return values[0]
 
@@ -218,18 +218,31 @@ class BioformatsImageReader(metadata.ImageReader):
         return img
 
 
-def length_as_microns(quantity, name):
+def length_as_microns(quantity, name, fallback=None):
     """Return a length quantity's value in microns.
 
     The `name` of the quantity is used to format a warning message on conversion
     failure.
 
+    If the quantity is None and `fallback` is provided, the fallback value is
+    returned and a suitable warning issued. If no fallback value is provided, a
+    ValueError is raised.
+
     """
+    if quantity is None:
+        if fallback is None:
+            raise ValueError(f"{name} is not defined")
+        else:
+            fallback = float(fallback)
+            warnings.warn(
+                f"{name} is not defined, falling back to {fallback} \u03BCm."
+            )
+            return fallback
     value = quantity.value(UNITS.MICROMETER)
     if value is None:
         # Conversion failed, which happens when the unit is "reference
         # frame". Take the bare value as microns, but emit a warning.
         # FIXME Figure out what "reference frame" means and handle this better.
-        warnings.warn("No units for {}, assuming micrometers.".format(name))
+        warnings.warn(f"No units for {name}, assuming \u03BCm.")
         value = quantity.value()
     return value.doubleValue()
