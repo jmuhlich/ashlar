@@ -167,11 +167,6 @@ class BioformatsReader(object):
             length_as_microns(q, "stage coordinates") for q in quantities
         ]
         position = np.array(values, dtype=float)
-        if not self.is_metamorph_stk:
-            # Except for Metamorph STK, invert Y so that stage position
-            # coordinates and image pixel coordinates are aligned.
-            # FIXME Ask BioFormats team about handling this in the Reader API.
-            position *= [-1, 1]
         return position
 
     @cached_property
