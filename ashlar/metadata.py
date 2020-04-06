@@ -168,12 +168,7 @@ class Plane(object):
         """Return the intersection of two Planes as another Plane."""
         if self.pixel_size != other.pixel_size:
             raise ValueError("Planes have different pixel sizes")
-        bounds = self.bounds.intersection(other.bounds)
-        shape = bounds.shape
-        min_width = min(shape.y, shape.x)
-        padding = min_overlap - min_width
-        if padding > 0:
-            bounds = self.bounds.intersection(bounds.inflate(padding))
+        bounds = self.bounds.intersection(other.bounds, min_overlap)
         crop_region = (bounds - self.bounds.vector1) / self.pixel_size
         image = self.image[crop_region.as_slice]
         return Plane(image, bounds, self.pixel_size)

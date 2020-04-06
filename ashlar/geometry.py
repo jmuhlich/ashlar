@@ -19,6 +19,9 @@ class Vector(object):
             raise ValueError("array shape must be (2,)")
         return cls(*a)
 
+    def min(self):
+        return min(self.y, self.x)
+
     def __add__(self, other):
         if not isinstance(other, Vector):
             return NotImplemented
@@ -148,7 +151,7 @@ class Rectangle(object):
             v1 = v2 = center
         return Rectangle(v1, v2)
 
-    def intersection(self, other):
+    def intersection(self, other, min_overlap=0):
         """Return the intersection of self and `other` as a Rectangle.
 
         If self and `other` don't overlap or merely touch, the returned
@@ -159,7 +162,11 @@ class Rectangle(object):
         """
         p1 = self.nearest_point(other.vector1)
         p2 = self.nearest_point(other.vector2)
-        return Rectangle(p1, p2)
+        rect = Rectangle(p1, p2)
+        padding = min_overlap - rect.shape.min()
+        if padding > 0:
+            rect = self.intersection(rect.inflate(padding))
+        return rect
 
     def nearest_point(self, other):
         """Return the point inside self that's nearest to `other`.
