@@ -168,9 +168,15 @@ class Plane(object):
         """Return the intersection of two Planes as another Plane."""
         if self.pixel_size != other.pixel_size:
             raise ValueError("Planes have different pixel sizes")
-        bounds = self.bounds.intersection(other.bounds, min_overlap)
+        return self.crop(other.bounds, min_overlap)
+
+    def crop(self, rect, min_overlap=0):
+        """Return a sub-region as a new Plane."""
+        bounds = self.bounds.intersection(rect, min_overlap)
         crop_region = (bounds - self.bounds.vector1) / self.pixel_size
         image = self.image[crop_region.as_slice]
+        # FIXME Does bounds needs to be adjusted to exactly line up with the
+        # pixel boundaries in the cropped image?
         return Plane(image, bounds, self.pixel_size)
 
 

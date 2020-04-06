@@ -6,6 +6,7 @@ import numpy as np
 import networkx as nx
 from . import metadata, geometry, util, align, plot
 from .util import attrib, cached_property
+from .geometry import Vector, Rectangle
 
 
 @attr.s(frozen=True, kw_only=True)
@@ -59,9 +60,9 @@ class RegistrationProcess(object):
         default=0, converter=float,
         doc="Neighbor overlap windows will be expanded to at least this size."
     )
-    num_permutations = attrib(
+    max_permutations = attrib(
         default=1000, converter=int,
-        doc="Number of permutations used to sample the error distribution."
+        doc="Maximum permutations used to sample the error distribution."
     )
     error_threshold_percentile = attrib(
         default=1, converter=float,
@@ -110,25 +111,64 @@ class RegistrationProcess(object):
         return self.tileset.get_tile(i, self.channel_number)
 
     def permutation_error_tasks(self):
-        for i in range(self.num_permutations):
-            while True:
-                a, b = self.random_tile_pair_index()
-                if a != b and (a, b) not in self.graph.edges:
-                    break
-            a_neighbor = self.tile_random_neighbor_index(a)
-            new_b_bounds = self.tileset.rectangles[a_neighbor]
-            yield a, b, new_b_bounds
-
-    def compute_permutation_error(self, a, b, new_b_bounds):
-        plane1 = self.get_tile(a).plane
-        plane2 = self.get_tile(b).plane
-        plane2 = attr.evolve(plane2, bounds=new_b_bounds)
-        intersection1 = plane1.intersection(plane2, self.overlap_minimum_size)
-        intersection2 = plane2.intersection(plane1, self.overlap_minimum_size)
-        alignment = align.register_planes(
-            intersection1, intersection2, self.filter_sigma
+        # Compute error threshold for rejecting aligments. We generate a
+        # distribution of error scores for many known non-overlapping image
+        # regions and take a certain percentile as the maximum allowable error.
+        # The percentile becomes our accepted false-positive ratio.
+        edges = self.graph.edges
+        num_tiles = len(self.tileset)
+        # If not enough overlapping tiles to matter, skip this whole thing.
+        if len(edges) <= 1:
+            return
+        rects = self.tileset.rectangles
+        widths = np.array([
+            rects[t1].intersection(
+                rects[t2], min_overlap=self.overlap_minimum_size
+            ).shape.min()
+            for t1, t2 in edges
+        ])
+        w = widths.max()
+        # Strip template rectangle -- horizontal, across the entire image width.
+        srect = Rectangle.from_shape(
+            Vector(0, 0), Vector(w, self.tileset.tile_shape[1])
         )
-        return alignment.error
+        max_offset = self.tileset.tile_shape[0] - w
+        # Number of possible pairs minus number of actual neighbor pairs.
+        num_distant_pairs = num_tiles * (num_tiles - 1) // 2 - len(edges)
+        # Reduce permutation count for small datasets -- there are fewer
+        # possible truly distinct strips with fewer tiles. The calculation here
+        # is just a heuristic, not rigorously derived.
+        num_permutations = self.max_permutations
+        if num_distant_pairs <= 8:
+            num_permutations = (num_distant_pairs + 1) * 10
+        # Generate n random non-overlapping image strips.
+        max_tries = 100
+        for i in range(num_permutations):
+            # Limit tries to avoid infinite loop in pathological cases.
+            for current_try in range(max_tries):
+                t1, t2 = self.random_tile_pair_index()
+                o1, o2 = self.random_state.randint(max_offset, size=2)
+                #o1, o2 = self.random_state.random(2) * max_offset
+                r1 = srect + rects[t1].vector1 + Vector(o1, 0)
+                r2 = srect + rects[t2].vector1 + Vector(o2, 0)
+                # Check for non-overlapping strips and abort the retry loop.
+                if r1.intersection(r2).area == 0:
+                    break
+            else:
+                # Retries exhausted. This should be very rare.
+                warn_data(
+                    "Could not find non-overlapping strips in {max_tries} tries"
+                )
+            yield t1, t2, r1, r2
+
+    def compute_permutation_error(self, a, b, a_region, b_region):
+        img1 = self.get_tile(a).plane.crop(a_region).image
+        img2 = self.get_tile(b).plane.crop(b_region).image
+        min_shape = np.minimum(img1.shape, img2.shape)
+        img1 = img1[:min_shape[0], :min_shape[1]]
+        img2 = img2[:min_shape[0], :min_shape[1]]
+        _, error = align.register(img1, img2, self.filter_sigma)
+        return error
 
     def compute_error_threshold(self, neighbor_permutation_errors):
         threshold = np.percentile(

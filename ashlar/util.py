@@ -87,7 +87,7 @@ class SerialExecutor(concurrent.futures.Executor):
         f = concurrent.futures.Future()
         try:
             result = fn(*args, **kwargs)
-        except BaseException as e:
+        except Exception as e:
             f.set_exception(e)
         else:
             f.set_result(result)
