@@ -25,6 +25,8 @@ from . import utils
 from . import thumbnail
 from . import __version__ as _version
 
+import time
+
 
 if not jnius_config.vm_running:
     pkg_root = pathlib.Path(__file__).parent.resolve()
@@ -472,13 +474,24 @@ class EdgeAligner(object):
     neighbors_graph = neighbors_graph
 
     def run(self):
+        times = []
+        times.append(time.perf_counter())
         self.make_thumbnail()
+        times.append(time.perf_counter())
         self.check_overlaps()
+        times.append(time.perf_counter())
         self.compute_threshold()
+        times.append(time.perf_counter())
         self.register_all()
+        times.append(time.perf_counter())
         self.build_spanning_tree()
+        times.append(time.perf_counter())
         self.calculate_positions()
+        times.append(time.perf_counter())
         self.fit_model()
+        times.append(time.perf_counter())
+        labels = ["begin", "thumbnail", "overlaps", "threshold", "register", "spanning_tree", "positions", "linear_model"]
+        return dict(zip(labels, times))
 
     def make_thumbnail(self):
         if not self.do_make_thumbnail:
@@ -801,10 +814,18 @@ class LayerAligner(object):
     neighbors_graph = neighbors_graph
 
     def run(self):
+        times = []
+        times.append(time.perf_counter())
         self.make_thumbnail()
+        times.append(time.perf_counter())
         self.coarse_align()
+        times.append(time.perf_counter())
         self.register_all()
+        times.append(time.perf_counter())
         self.calculate_positions()
+        times.append(time.perf_counter())
+        labels = ["begin", "thumbnail", "coarse", "register", "positions"]
+        return dict(zip(labels, times))
 
     def make_thumbnail(self):
         self.reader.thumbnail = thumbnail.make_thumbnail(
@@ -1433,7 +1454,7 @@ def plot_layer_quality(
         for idx, (x, y) in enumerate(np.fliplr(positions)):
             text = plt.annotate(str(idx), (x+0.1*w, y+0.9*h), alpha=0.7)
             # Add outline to text for better contrast in different background color.
-            text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAA')
+            text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAAAAA')
             text.set_path_effects(
                 [text_outline, mpatheffects.Normal()]
             )
