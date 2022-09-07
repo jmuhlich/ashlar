@@ -9,6 +9,7 @@ from .. import reg
 from ..reg import PlateReader, BioformatsReader
 from ..filepattern import FilePatternReader
 from ..fileseries import FileSeriesReader
+from ..report import generate_report
 from ..zen import ZenReader
 
 
@@ -108,6 +109,11 @@ def main(argv=sys.argv):
     parser.add_argument(
         '--plates', default=False, action='store_true',
         help='Enable plate mode for HTS data',
+    )
+    parser.add_argument(
+        "--report", metavar="FILE", type=str_file_pdf,
+        help=("Generate quality control report in FILE in PDF format. FILE"
+              " must end in .pdf (default: no report)"),
     )
     parser.add_argument(
         '-q', '--quiet', dest='quiet', default=False,
@@ -216,6 +222,7 @@ def main(argv=sys.argv):
 
     try:
         if args.plates:
+            # FIXME handle report
             return process_plates(
                 filepaths, output_path, args.filename_format, args.flip_x,
                 args.flip_y, ffp_paths, dfp_paths, args.barrel_correction,
@@ -226,7 +233,7 @@ def main(argv=sys.argv):
             return process_single(
                 filepaths, mosaic_path_format, args.flip_x, args.flip_y,
                 ffp_paths, dfp_paths, args.barrel_correction, aligner_args,
-                mosaic_args, args.pyramid, args.quiet
+                mosaic_args, args.pyramid, args.report, args.quiet
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -235,7 +242,7 @@ def main(argv=sys.argv):
 
 def process_single(
     filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
+    barrel_correction, aligner_args, mosaic_args, pyramid, report_path, quiet,
     plate_well=None
 ):
 
@@ -295,6 +302,9 @@ def process_single(
     )
     writer.run()
 
+    if report_path:
+        generate_report(report_path, [m.aligner for m in mosaics])
+
     return 0
 
 
@@ -325,7 +335,7 @@ def process_plates(
                 process_single(
                     filepaths, mosaic_path_format, flip_x, flip_y,
                     ffp_paths, dfp_paths, barrel_correction, aligner_args,
-                    mosaic_args, pyramid, quiet, plate_well=(p, w)
+                    mosaic_args, pyramid, None, quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
@@ -436,6 +446,12 @@ class HelpFormatter(argparse.HelpFormatter):
             if action.option_strings or action.nargs in defaulting_nargs:
                 help += " (default: %(default)s)"
         return help
+
+
+def str_file_pdf(v):
+    if not re.search(r"\.pdf$", v):
+        raise argparse.ArgumentTypeError(f"path does not end in .pdf: '{v}'")
+    return v
 
 
 class ProcessingError(RuntimeError):
