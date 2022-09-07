@@ -1,14 +1,38 @@
-import matplotlib.pyplot as plt
+import fpdf
+import functools
+import io
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 import matplotlib.cm as mcm
+import matplotlib.image as mimage
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as mpatheffects
+import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 import seaborn as sns
 
 
 def generate_report(path, aligners):
     aligner0, *aligners = aligners
-    plot_edge_scatter(aligner0)
+    pdf = fpdf.FPDF(unit="in", format="letter")
+    pdf.add_page()
+    fig = plot_edge_scatter(aligner0)
+    fig.set_size_inches(7.5, 7.5)
+    add_figure(pdf, fig)
+    plt.close(fig)
+    pdf.output(path)
+
+
+def add_figure(pdf, fig):
+    if fig.findobj(mimage.AxesImage):
+        fig.set_dpi(300)
+        canvas = FigureCanvasAgg(fig)
+        canvas.draw()
+        img = Image.fromarray(np.asarray(canvas.buffer_rgba()))
+    else:
+        img = io.BytesIO()
+        fig.savefig(img, format="svg")
+    pdf.image(img, w=pdf.epw)
 
 
 def plot_edge_shifts(aligner, img=None, bounds=True, im_kwargs=None):
@@ -102,28 +126,30 @@ def plot_edge_quality(
 
 def plot_edge_scatter(aligner, annotate=True):
     xdata = np.clip(aligner.all_errors, 0, 10)
-    ydata = np.clip(
-        [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
+    ydata = (
+        np.linalg.norm([v[0] for v in aligner._cache.values()], axis=1)
+        .clip(0.01, np.inf)
+        * aligner.metadata.pixel_size
     )
     pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
     g = sns.JointGrid(x=xdata, y=ydata)
     g.plot_joint(sns.scatterplot, alpha=0.5, ax=g.ax_joint)
-    _, xbins = np.histogram(np.hstack([xdata, pdata]), bins=40)
-    sns.distplot(
-        xdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True
+    histplot = functools.partial(
+        sns.histplot, bins=40, stat="density", kde=True, color="tab:blue", ec="white"
     )
-    sns.distplot(
-        pdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True,
-        hist_kws=dict(histtype='step')
-    )
-    g.ax_joint.axvline(aligner.max_error, c='k', ls=':')
-    g.ax_joint.axhline(aligner.max_shift_pixels, c='k', ls=':')
-    g.ax_joint.set_yscale('log')
-    g.set_axis_labels('error', 'shift')
+    histplot(x=xdata, ax=g.ax_marg_x)
+    histplot(y=ydata, ax=g.ax_marg_y, log_scale=True)
+    sns.kdeplot(x=pdata, ax=g.ax_marg_x, color="salmon")
+    g.ax_joint.axvline(aligner.max_error, c="k", ls=":")
+    g.ax_marg_x.axvline(aligner.max_error, c="k", ls=":")
+    g.ax_joint.axhline(aligner.max_shift, c="k", ls=":")
+    g.ax_marg_y.axhline(aligner.max_shift, c="k", ls=":")
+    g.set_axis_labels("Error (-log NCC)", "Shift distance (\u00B5m)")
     if annotate:
         for pair, x, y in zip(aligner.neighbors_graph.edges, xdata, ydata):
-            g.ax_joint.annotate(str(pair), (x, y), alpha=0.1)
-    plt.tight_layout()
+            g.ax_joint.annotate(str(pair), (x, y), alpha=0.5, size=6)
+    g.figure.tight_layout()
+    return g.figure
 
 
 def plot_layer_shifts(aligner, img=None, im_kwargs=None):
