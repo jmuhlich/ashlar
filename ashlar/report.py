@@ -21,7 +21,7 @@ def generate_report(path, aligners):
     pdf.set_font("Helvetica")
 
     pdf.add_page()
-    fig = plot_edge_map(aligner0, aligner0.reader.thumbnail, im_kwargs={"cmap": "gray"})
+    fig = plot_edge_map(aligner0, aligner0.reader.thumbnail)
     fig.set_size_inches(7.5, 9)
     pdf.add_figure(fig, "Cycle 1: Tile pair alignment map")
     plt.close(fig)
@@ -55,47 +55,71 @@ class PDF(fpdf.FPDF):
 
 
 def plot_edge_map(
-    aligner, img=None, show_tree=True, pos='metadata', im_kwargs=None, nx_kwargs=None
+    aligner,
+    img=None,
+    pos="metadata",
+    width=4,
+    node_size=100,
+    font_size=6,
+    cmap="gray",
+    im_kwargs=None,
+    nx_kwargs=None,
 ):
-    if pos == 'metadata':
+    """Plot neighbor graph colored by edge alignment quality"""
+
+    if pos == "metadata":
         centers = aligner.metadata.centers - aligner.metadata.origin
-    elif pos == 'aligner':
+    elif pos == "aligner":
         centers = aligner.centers
     else:
         raise ValueError("pos must be either 'metadata' or 'aligner'")
-    pos = np.fliplr(centers)
-    if im_kwargs is None:
-        im_kwargs = {}
-    if nx_kwargs is None:
-        nx_kwargs = {}
-    final_nx_kwargs = dict(width=2, node_size=100, font_size=6)
-    final_nx_kwargs.update(nx_kwargs)
-    if show_tree:
-        nrows, ncols = 1, 2
-        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 2 * 4 / 3:
-            nrows, ncols = ncols, nrows
-    else:
-        nrows, ncols = 1, 1
+    im_kwargs = im_kwargs or {}
+    nx_kwargs = nx_kwargs or {}
     fig, ax = plt.subplots()
-    draw_mosaic_image(ax, aligner, img, **im_kwargs)
+    draw_mosaic_image(ax, aligner, img, cmap=cmap, **im_kwargs)
     error = np.array([
         aligner._cache[tuple(sorted(e))][1]
         for e in aligner.neighbors_graph.edges
     ])
     efinite = error[error < np.inf]
     emin, emax = (efinite.min(), efinite.max()) if len(efinite) > 0 else (0, 0)
+    in_tree = [
+        e in aligner.spanning_tree.edges
+        for e in aligner.neighbors_graph.edges
+    ]
+    width = np.where(in_tree, width, width * 0.75)
+    style = np.where(in_tree, "solid", "dotted")
     cmap = copy.copy(mcm.Blues)
     cmap.set_over((0.1, 0.1, 0.1))
-    fig.colorbar(
+    g = aligner.neighbors_graph
+    pos = np.fliplr(centers)
+    nx.draw_networkx_nodes(g, pos, ax=ax, node_size=node_size, **nx_kwargs)
+    ec = nx.draw_networkx_edges(
+        g,
+        pos,
+        ax=ax,
+        edge_color=error,
+        edge_vmin=emin,
+        edge_vmax=emax,
+        edge_cmap=cmap,
+        width=width,
+        style=style,
+        **nx_kwargs,
+    )
+    nx.draw_networkx_labels(g, pos, ax=ax, font_size=font_size, **nx_kwargs)
+    rh, rw = aligner.metadata.size
+    for x, y in pos:
+        x -= rw / 2
+        y -= rh / 2
+        rect = mpatches.Rectangle(
+            (x, y), rw, rh, color='darkred', fill=False, lw=0.25, zorder=0.5
+        )
+        ax.add_patch(rect)
+    cbar = fig.colorbar(
         mcm.ScalarMappable(mcolors.Normalize(emin, emax), cmap),
         extend="max",
+        label="Error (-log NCC)",
         ax=ax,
-    )
-    # Neighbor graph colored by edge alignment quality (brighter = better).
-    nx.draw_networkx(
-        aligner.neighbors_graph, ax=ax,
-        pos=pos, edge_color=error, edge_vmin=emin, edge_vmax=emax,
-        edge_cmap=cmap, **final_nx_kwargs
     )
     fig.tight_layout()
     return fig
