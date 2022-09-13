@@ -1,12 +1,15 @@
+import copy
 import fpdf
 import functools
 import io
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 import matplotlib.cm as mcm
+import matplotlib.colors as mcolors
 import matplotlib.image as mimage
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as mpatheffects
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 from PIL import Image
 import seaborn as sns
@@ -14,25 +17,88 @@ import seaborn as sns
 
 def generate_report(path, aligners):
     aligner0, *aligners = aligners
-    pdf = fpdf.FPDF(unit="in", format="letter")
+    pdf = PDF(unit="in", format="letter")
+    pdf.set_font("Helvetica")
+
     pdf.add_page()
-    fig = plot_edge_scatter(aligner0)
-    fig.set_size_inches(7.5, 7.5)
-    add_figure(pdf, fig)
+    fig = plot_edge_map(aligner0, aligner0.reader.thumbnail, im_kwargs={"cmap": "gray"})
+    fig.set_size_inches(7.5, 9)
+    pdf.add_figure(fig, "Cycle 1: Tile pair alignment map")
     plt.close(fig)
+
+    pdf.add_page()
+    fig = plot_edge_quality(aligner0)
+    fig.set_size_inches(7.5, 7.5)
+    pdf.add_figure(fig, "Cycle 1: Tile pair alignment quality")
+    plt.close(fig)
+
     pdf.output(path)
 
 
-def add_figure(pdf, fig):
-    if fig.findobj(mimage.AxesImage):
-        fig.set_dpi(300)
-        canvas = FigureCanvasAgg(fig)
-        canvas.draw()
-        img = Image.fromarray(np.asarray(canvas.buffer_rgba()))
+class PDF(fpdf.FPDF):
+
+    def add_figure_title(self, txt):
+        with self.local_context(font_size=16, font_style="B"):
+            self.cell(txt=txt, w=0, align="C", new_x="LEFT", new_y="NEXT")
+
+    def add_figure(self, fig, title):
+        self.add_figure_title(title)
+        if fig.findobj(mimage.AxesImage):
+            fig.set_dpi(300)
+            canvas = FigureCanvasAgg(fig)
+            canvas.draw()
+            img = Image.fromarray(np.asarray(canvas.buffer_rgba()))
+        else:
+            img = io.BytesIO()
+            fig.savefig(img, format="svg")
+        self.image(img, w=self.epw)
+
+
+def plot_edge_map(
+    aligner, img=None, show_tree=True, pos='metadata', im_kwargs=None, nx_kwargs=None
+):
+    if pos == 'metadata':
+        centers = aligner.metadata.centers - aligner.metadata.origin
+    elif pos == 'aligner':
+        centers = aligner.centers
     else:
-        img = io.BytesIO()
-        fig.savefig(img, format="svg")
-    pdf.image(img, w=pdf.epw)
+        raise ValueError("pos must be either 'metadata' or 'aligner'")
+    pos = np.fliplr(centers)
+    if im_kwargs is None:
+        im_kwargs = {}
+    if nx_kwargs is None:
+        nx_kwargs = {}
+    final_nx_kwargs = dict(width=2, node_size=100, font_size=6)
+    final_nx_kwargs.update(nx_kwargs)
+    if show_tree:
+        nrows, ncols = 1, 2
+        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 2 * 4 / 3:
+            nrows, ncols = ncols, nrows
+    else:
+        nrows, ncols = 1, 1
+    fig, ax = plt.subplots()
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
+    error = np.array([
+        aligner._cache[tuple(sorted(e))][1]
+        for e in aligner.neighbors_graph.edges
+    ])
+    efinite = error[error < np.inf]
+    emin, emax = (efinite.min(), efinite.max()) if len(efinite) > 0 else (0, 0)
+    cmap = copy.copy(mcm.Blues)
+    cmap.set_over((0.1, 0.1, 0.1))
+    fig.colorbar(
+        mcm.ScalarMappable(mcolors.Normalize(emin, emax), cmap),
+        extend="max",
+        ax=ax,
+    )
+    # Neighbor graph colored by edge alignment quality (brighter = better).
+    nx.draw_networkx(
+        aligner.neighbors_graph, ax=ax,
+        pos=pos, edge_color=error, edge_vmin=emin, edge_vmax=emax,
+        edge_cmap=cmap, **final_nx_kwargs
+    )
+    fig.tight_layout()
+    return fig
 
 
 def plot_edge_shifts(aligner, img=None, bounds=True, im_kwargs=None):
@@ -63,68 +129,7 @@ def plot_edge_shifts(aligner, img=None, bounds=True, im_kwargs=None):
     fig.set_facecolor('black')
 
 
-def plot_edge_quality(
-    aligner, img=None, show_tree=True, pos='metadata', im_kwargs=None, nx_kwargs=None
-):
-    if pos == 'metadata':
-        centers = aligner.metadata.centers - aligner.metadata.origin
-    elif pos == 'aligner':
-        centers = aligner.centers
-    else:
-        raise ValueError("pos must be either 'metadata' or 'aligner'")
-    if im_kwargs is None:
-        im_kwargs = {}
-    if nx_kwargs is None:
-        nx_kwargs = {}
-    final_nx_kwargs = dict(width=2, node_size=100, font_size=6)
-    final_nx_kwargs.update(nx_kwargs)
-    if show_tree:
-        nrows, ncols = 1, 2
-        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 2 * 4 / 3:
-            nrows, ncols = ncols, nrows
-    else:
-        nrows, ncols = 1, 1
-    fig = plt.figure()
-    ax = plt.subplot(nrows, ncols, 1)
-    draw_mosaic_image(ax, aligner, img, **im_kwargs)
-    error = np.array([aligner._cache[tuple(sorted(e))][1]
-                      for e in aligner.neighbors_graph.edges])
-    # Manually center and scale data to 0-1, except infinity which is set to -1.
-    # This lets us use the purple-green diverging color map to color the graph
-    # edges and cause the "infinity" edges to disappear into the background
-    # (which is itself purple).
-    infs = error == np.inf
-    error[infs] = -1
-    if not infs.all():
-        error_f = error[~infs]
-        emin = np.min(error_f)
-        emax = np.max(error_f)
-        if emin == emax:
-            # Always true when there's only one edge. Otherwise it's unlikely
-            # but theoretically possible.
-            erange = 1
-        else:
-            erange = emax - emin
-        error[~infs] = (error_f - emin) / erange
-    # Neighbor graph colored by edge alignment quality (brighter = better).
-    nx.draw(
-        aligner.neighbors_graph, ax=ax, with_labels=True,
-        pos=np.fliplr(centers), edge_color=error, edge_vmin=-1, edge_vmax=1,
-        edge_cmap=plt.get_cmap('PRGn'), **final_nx_kwargs
-    )
-    if show_tree:
-        ax = plt.subplot(nrows, ncols, 2)
-        draw_mosaic_image(ax, aligner, img, **im_kwargs)
-        # Spanning tree with nodes at original tile positions.
-        nx.draw(
-            aligner.spanning_tree, ax=ax, with_labels=True,
-            pos=np.fliplr(centers), edge_color='royalblue',
-            **final_nx_kwargs
-        )
-    fig.set_facecolor('black')
-
-
-def plot_edge_scatter(aligner, annotate=True):
+def plot_edge_quality(aligner, annotate=True):
     xdata = np.clip(aligner.all_errors, 0, 10)
     ydata = (
         np.linalg.norm([v[0] for v in aligner._cache.values()], axis=1)
