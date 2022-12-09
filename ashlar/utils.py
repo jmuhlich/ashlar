@@ -5,6 +5,7 @@ import skimage
 import skimage.restoration.uft
 import scipy.ndimage
 import numpy as np
+from . import transform
 
 
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
@@ -21,11 +22,14 @@ def whiten(img, sigma):
 
 @functools.lru_cache
 def get_window(shape):
-    # Build a 2D Hann window by taking the outer product of two 1-D windows.
-    wy = np.hanning(shape[0]).astype(np.float32)
-    wx = np.hanning(shape[1]).astype(np.float32)
-    window = np.outer(wy, wx)
-    return window
+    if isinstance(shape, int) or len(shape) == 1:
+        return np.hanning(shape).astype(np.float32)
+    else:
+        # Build a 2D Hann window by taking the outer product of two 1-D windows.
+        wy = np.hanning(shape[0]).astype(np.float32)
+        wx = np.hanning(shape[1]).astype(np.float32)
+        window = np.outer(wy, wx)
+        return window
 
 
 def window(img):
@@ -64,6 +68,33 @@ def register(img1, img2, sigma, upsample=10):
     else:
         error = np.inf
     return shift, error
+
+
+def register_angle(img1, img2, sigma, upsample=10):
+    img1w = whiten(img1, sigma)
+    img2w = whiten(img2, sigma)
+    p1w = reg_transform_polar(img1w)
+    p2w = reg_transform_polar(img2w)
+    shift, _, _ = skimage.registration.phase_cross_correlation(
+        p1w, p2w, upsample_factor=upsample
+    )
+    angles = np.array(shift[0] / p1w.shape[0] * 360 % 180) + [0, -180]
+    correlations = [
+        np.abs(np.sum(img1w * scipy.ndimage.rotate(img2w, a, reshape=False)))
+        for a in angles
+    ]
+    idx = np.argmax(correlations)
+    angle = angles[idx]
+    return angle
+
+
+def reg_transform_polar(img):
+    freq_mag = np.abs(np.fft.fft2(window(img)))
+    trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
+    pshape = (360 * 3, round(np.linalg.norm(img.shape) / 2))
+    polar_img = transform.polar2cart(window(trans_inv_img), output_shape=pshape)
+    polar_img = np.clip(polar_img, 0, None)
+    return polar_img
 
 
 def nccw(img1, img2, sigma):
