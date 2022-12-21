@@ -36,7 +36,7 @@ def make_thumbnail(reader, channel=0, scale=0.05):
         # images are bigger than the scale factor. This speeds up the rescaling
         # dramatically.
         img_s = rescale(img, scale, anti_aliasing=False)
-        utils.paste(mosaic, img_s, pos_s, utils.pastefunc_blend)
+        utils.paste(mosaic, img_s, pos_s, 0, utils.pastefunc_blend)
     print()
     return mosaic
 
@@ -63,8 +63,8 @@ def align_cycles(reader1, reader2, scale=0.05):
     if img1.shape != img2.shape:
         padded_shape = np.array((img1.shape, img2.shape)).max(axis=0)
         padded_img1, padded_img2 = np.zeros(padded_shape), np.zeros(padded_shape)
-        utils.paste(padded_img1, img1, [0, 0])
-        utils.paste(padded_img2, img2, [0, 0])
+        utils.paste(padded_img1, img1, [0, 0], 0)
+        utils.paste(padded_img2, img2, [0, 0], 0)
         img1 = padded_img1
         img2 = padded_img2
     angle = utils.register_angle(img1, img2, sigma=1)
