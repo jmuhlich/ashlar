@@ -1021,8 +1021,6 @@ class LayerAligner(object):
     def debug(self, t):
         shift, _ = self.register(t)
         its, o1, o2 = self.overlap(t)
-        if self.cycle_angle_fine != 0:
-            o2 = scipy.ndimage.rotate(o2, self.cycle_angle_fine, reshape=False)
         w1 = utils.window(utils.whiten(o1, self.filter_sigma))
         w2 = utils.window(utils.whiten(o2, self.filter_sigma))
         corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
