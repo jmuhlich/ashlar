@@ -191,6 +191,11 @@ def paste(target, img, pos, angle, func=None):
     # Bail out if destination region is out of bounds.
     if np.any(pos >= target.shape[:2]) or np.any(pos + img.shape[:2] < 0):
         return
+    if angle != 0:
+        orig_shape = img.shape
+        img = scipy.ndimage.rotate(img, angle)
+        shape_diff = np.subtract(img.shape, orig_shape)[:2]
+        pos -= shape_diff / 2
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -222,10 +227,6 @@ def paste(target, img, pos, angle, func=None):
         # Exit if image area is zero after subpixel shift.
         if not np.all(img.shape):
             return
-    # FIXME Should allow reshape and use a proper mask for compositing to avoid
-    # issues with the zero pixels in the corners after rotation.
-    if angle != 0:
-        img = scipy.ndimage.rotate(img, angle, reshape=False)
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = dtype_convert(img, target.dtype)
