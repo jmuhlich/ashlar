@@ -83,6 +83,9 @@ def register_angle(img1, img2, sigma, upsample=10):
     # expect the true angle to be close to zero, so we'll invert anything beyond
     # +/-90 degrees.
     angle = (shift[0] / p1w.shape[0] * 360 + 90) % 180 - 90
+    # skimage's warp_polar maps polar angle to the Y-axis in the opposite
+    # direction our math expects, so we need to flip the angle's sign.
+    angle = -angle
     return angle
 
 
@@ -90,7 +93,9 @@ def reg_transform_polar(img):
     freq_mag = np.abs(np.fft.fft2(window(img)))
     trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
     pshape = (360 * 10, round(np.linalg.norm(img.shape) / 2))
-    polar_img = transform.polar2cart(window(trans_inv_img), output_shape=pshape)
+    polar_img = skimage.transform.warp_polar(
+        window(trans_inv_img), output_shape=pshape
+    )
     polar_img = np.clip(polar_img, 0, None) * get_window(polar_img.shape[1])
     return polar_img
 
