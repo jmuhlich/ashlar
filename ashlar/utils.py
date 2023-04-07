@@ -91,7 +91,7 @@ def register_angle(img1, img2, sigma, upsample=10):
 def reg_transform_polar(img):
     freq_mag = np.abs(np.fft.fft2(window(img)))
     trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
-    pshape = (360 * 3, round(np.linalg.norm(img.shape) / 2))
+    pshape = (360 * 10, round(np.linalg.norm(img.shape) / 2))
     polar_img = transform.polar2cart(window(trans_inv_img), output_shape=pshape)
     polar_img = np.clip(polar_img, 0, None) * get_window(polar_img.shape[1])
     return polar_img
