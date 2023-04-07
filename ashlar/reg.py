@@ -983,7 +983,7 @@ class LayerAligner(object):
             print()
         angle = np.nanmedian(angles)
         if self.verbose:
-            print(f"    refined cycle rotation = {angle:.2} degrees")
+            print(f"    refined cycle rotation = {angle:.2f} degrees")
         self.cycle_angle_fine = angle
         self.tform_rotation = skimage.transform.AffineTransform(rotation=angle)
 
