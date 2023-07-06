@@ -973,7 +973,7 @@ class LayerAligner(object):
         its, ref_img, img = self.overlap(t)
         if np.any(np.array(its.shape) == 0):
             return np.nan
-        angle = utils.register_angle(ref_img, img, 0)
+        angle = utils.register_angle(ref_img, img, self.filter_sigma)
         return angle
 
     def refine_cycle_angle(self):
