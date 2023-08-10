@@ -58,10 +58,10 @@ def plot_edge_map(
     aligner,
     img=None,
     pos="metadata",
-    width=4,
-    node_size=100,
-    font_size=6,
-    cmap="gray",
+    cmap="pink",
+    width=None,
+    node_size=None,
+    font_size=None,
     im_kwargs=None,
     nx_kwargs=None,
 ):
@@ -87,13 +87,27 @@ def plot_edge_map(
         e in aligner.spanning_tree.edges
         for e in aligner.neighbors_graph.edges
     ]
+    diameter = nx.diameter(aligner.neighbors_graph)
+    drange = [10, 60]
+    interp = functools.partial(np.interp, diameter, [10, 60])
+    width = width or interp([4, 1])
+    node_size = node_size or interp([100, 8])
+    font_size = font_size or interp([6, 2])
     width = np.where(in_tree, width, width * 0.75)
     style = np.where(in_tree, "solid", "dotted")
     cmap = copy.copy(mcm.Blues)
     cmap.set_over((0.1, 0.1, 0.1))
     g = aligner.neighbors_graph
     pos = np.fliplr(centers)
-    nx.draw_networkx_nodes(g, pos, ax=ax, node_size=node_size, **nx_kwargs)
+    nx.draw_networkx_nodes(
+        g,
+        pos,
+        ax=ax,
+        node_color="silver",
+        node_size=node_size,
+        edgecolors=None,
+        **nx_kwargs,
+    )
     ec = nx.draw_networkx_edges(
         g,
         pos,
@@ -112,15 +126,19 @@ def plot_edge_map(
         x -= rw / 2
         y -= rh / 2
         rect = mpatches.Rectangle(
-            (x, y), rw, rh, color='darkred', fill=False, lw=0.25, zorder=0.5
+            (x, y), rw, rh, color='silver', alpha=0.25, fill=False, lw=0.25, zorder=0.5
         )
         ax.add_patch(rect)
     cbar = fig.colorbar(
         mcm.ScalarMappable(mcolors.Normalize(emin, emax), cmap),
         extend="max",
         label="Error (-log NCC)",
+        location="right",
+        shrink=0.5,
         ax=ax,
     )
+    ax.set_frame_on(False)
+    ax.margins(0)
     fig.tight_layout()
     return fig
 
@@ -261,5 +279,10 @@ def plot_layer_quality(
 def draw_mosaic_image(ax, aligner, img, **kwargs):
     if img is None:
         img = [[0]]
-    h, w = aligner.mosaic_shape
+    cmax = np.max(aligner.metadata.centers - aligner.metadata.origin, axis=0)
+    h, w = cmax + aligner.metadata.size / 2
+    if "vmin" not in kwargs:
+        kwargs["vmin"] = np.percentile(img, 1)
+    if "vmax" not in kwargs:
+        kwargs["vmax"] = np.percentile(img, 99)
     ax.imshow(img, extent=(-0.5, w-0.5, h-0.5, -0.5), **kwargs)
