@@ -180,9 +180,14 @@ def plot_edge_quality(aligner, annotate=True):
     )
     pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
     g = sns.JointGrid(x=xdata, y=ydata)
-    g.plot_joint(sns.scatterplot, alpha=0.5, ax=g.ax_joint)
+    g.plot_joint(sns.scatterplot, alpha=0.5, ec="none", ax=g.ax_joint)
     histplot = functools.partial(
-        sns.histplot, bins=40, stat="density", kde=True, color="tab:blue", ec="white"
+        sns.histplot,
+        bins=40,
+        stat="density",
+        kde=True,
+        color="tab:blue",
+        ec="white",
     )
     histplot(x=xdata, ax=g.ax_marg_x)
     histplot(y=ydata, ax=g.ax_marg_y, log_scale=True)
@@ -194,7 +199,7 @@ def plot_edge_quality(aligner, annotate=True):
     g.set_axis_labels("Error (-log NCC)", "Shift distance (\u00B5m)")
     if annotate:
         for pair, x, y in zip(aligner.neighbors_graph.edges, xdata, ydata):
-            g.ax_joint.annotate(str(pair), (x, y), alpha=0.5, size=6)
+            g.ax_joint.annotate(str(pair), (x, y), alpha=0.25, size=6)
     g.figure.tight_layout()
     return g.figure
 
