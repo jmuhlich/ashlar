@@ -263,7 +263,8 @@ def process_single(
     ea_args = aligner_args.copy()
     for arg in ("alpha", "max_error"):
         aligner_args.pop(arg, None)
-    if len(filepaths) == 1:
+    # Skip thumbnail unless 2+ cycles or report is enabled.
+    if len(filepaths) == 1 and report_path is None:
         ea_args['do_make_thumbnail'] = False
     edge_aligner = reg.EdgeAligner(reader, **ea_args)
     edge_aligner.run()
@@ -291,6 +292,8 @@ def process_single(
         mosaics.append(reg.Mosaic(layer_aligner, mshape, **mosaic_args_final))
 
     # Disable reader caching to save memory during mosaicing and writing.
+    if hasattr(edge_aligner.reader, "thumbnail"):
+        edge_aligner.reader.reader.thumbnail = edge_aligner.reader.thumbnail
     edge_aligner.reader = edge_aligner.reader.reader
 
     if not quiet:
