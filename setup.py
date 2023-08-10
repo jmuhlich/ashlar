@@ -18,6 +18,9 @@ requires = [
     'tifffile>=2023.3.15',
     'zarr>=2.11.3',
     'blessed>=1.17',
+    'Pillow>=9.0.0',
+    'fpdf2>=2.7.5',
+    'seaborn>=0.12.2',
 ]
 
 
