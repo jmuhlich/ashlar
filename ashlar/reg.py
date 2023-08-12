@@ -1,6 +1,7 @@
 import sys
 import math
 import warnings
+import os
 import xml.etree.ElementTree
 import pathlib
 import jnius_config
@@ -1209,7 +1210,7 @@ class Mosaic(object):
 class PyramidWriter:
 
     def __init__(
-        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
+        self, mosaics, path, metadata_list, scale=2, tile_size=1024, peak_size=1024, verbose=False
     ):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
@@ -1221,6 +1222,7 @@ class PyramidWriter:
         self.tile_size = tile_size
         self.peak_size = peak_size
         self.verbose = verbose
+        self.metadata_list = metadata_list
 
     @property
     def ref_mosaic(self):
@@ -1315,13 +1317,27 @@ class PyramidWriter:
         pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
         resolution_cm = 10000 / pixel_size
         software = f"Ashlar v{_version}"
+        image_name = os.path.basename(self.path)
         metadata = {
             "Creator": software,
             "Pixels": {
+                "Name": image_name,
                 "PhysicalSizeX": pixel_size, "PhysicalSizeXUnit": "\u00b5m",
-                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
+                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m",
             },
         }
+        if self.metadata_list:
+            #TODO add significant error handling
+            # create Channel entry and fill it
+            metadata["Pixels"]["Channel"] = {}
+            metadata["Pixels"]["Channel"]["Name"] = [ sub['Name'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["Fluor"] = [ sub['Fluor'] for sub in self.metadata_list ]
+
+            # create Plane entry and fill it
+            metadata["Pixels"]["Plane"] = {}
+            metadata["Pixels"]["Plane"]["ExposureTime"] = [ sub['ExposureTime'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Plane"]["ExposureTimeUnit"] = [ sub['ExposureTimeUnit'] for sub in self.metadata_list ]
+
         with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
             tiff.write(
                 data=self.base_tiles(),
@@ -1359,12 +1375,14 @@ class PyramidWriter:
 
 class TiffListWriter:
 
-    def __init__(self, mosaics, path_format, verbose=False):
+    def __init__(self, mosaics, path_format, metadata_list, verbose=False):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
         self.mosaics = mosaics
         self.path_format = path_format
         self.verbose = verbose
+        # nothing happens with the metadataList info yet
+        self.metadata_list = metadata_list
 
     def run(self):
         pixel_size = self.mosaics[0].aligner.metadata.pixel_size

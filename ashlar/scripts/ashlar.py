@@ -4,6 +4,7 @@ import re
 import argparse
 import pathlib
 import blessed
+import csv
 from .. import __version__ as VERSION
 from .. import reg
 from ..reg import PlateReader, BioformatsReader
@@ -109,6 +110,13 @@ def main(argv=sys.argv):
         '--plates', default=False, action='store_true',
         help='Enable plate mode for HTS data',
     )
+    # added by DS
+    parser.add_argument(
+         '--metadata', dest='metadata', metavar='PATH',
+         help=("Add the channel metadata in this file to the output ome.tif."
+               " Note that metadata from the input image files override this info."
+               " (default: no additional metadata is added)"),
+    )
     parser.add_argument(
         '-q', '--quiet', dest='quiet', default=False,
         action='store_true', help='Suppress progress display',
@@ -196,6 +204,14 @@ def main(argv=sys.argv):
         if len(dfp_paths) == 1:
             dfp_paths = dfp_paths * len(filepaths)
 
+    metadata_list = []
+    metadata_path = args.metadata
+    if metadata_path:
+         # read it from file and do error checking
+         with open(metadata_path, newline='') as f:
+             dict_reader = csv.DictReader(f)
+             metadata_list = list(dict_reader)
+
     aligner_args = {}
     aligner_args['channel'] = args.align_channel
     aligner_args['verbose'] = not args.quiet
@@ -219,14 +235,14 @@ def main(argv=sys.argv):
             return process_plates(
                 filepaths, output_path, args.filename_format, args.flip_x,
                 args.flip_y, ffp_paths, dfp_paths, args.barrel_correction,
-                aligner_args, mosaic_args, args.pyramid, args.quiet
+                aligner_args, mosaic_args, args.pyramid, args.quiet, metadata_list
             )
         else:
             mosaic_path_format = str(output_path / args.filename_format)
             return process_single(
                 filepaths, mosaic_path_format, args.flip_x, args.flip_y,
                 ffp_paths, dfp_paths, args.barrel_correction, aligner_args,
-                mosaic_args, args.pyramid, args.quiet
+                mosaic_args, args.pyramid, args.quiet, metadata_list
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -235,7 +251,7 @@ def main(argv=sys.argv):
 
 def process_single(
     filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
+    barrel_correction, aligner_args, mosaic_args, pyramid, quiet, metadata_list,
     plate_well=None
 ):
 
@@ -291,7 +307,7 @@ def process_single(
         print(f"Merging tiles and writing to {output_path_format}")
     writer_class = reg.PyramidWriter if pyramid else reg.TiffListWriter
     writer = writer_class(
-        mosaics, output_path_format, verbose=not quiet, **writer_args
+        mosaics, output_path_format, metadata_list, verbose=not quiet, **writer_args
     )
     writer.run()
 
@@ -300,7 +316,8 @@ def process_single(
 
 def process_plates(
     filepaths, output_path, filename_format, flip_x, flip_y, ffp_paths,
-    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid, quiet
+    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
+    metadata_list
 ):
 
     temp_reader = build_reader(filepaths[0])
@@ -325,7 +342,7 @@ def process_plates(
                 process_single(
                     filepaths, mosaic_path_format, flip_x, flip_y,
                     ffp_paths, dfp_paths, barrel_correction, aligner_args,
-                    mosaic_args, pyramid, quiet, plate_well=(p, w)
+                    mosaic_args, pyramid, quiet, metadata_list, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")

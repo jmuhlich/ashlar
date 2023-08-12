@@ -72,6 +72,14 @@ optional arguments:
                         cycles or one file for every cycle. Channel counts
                         must match input files. (default: no dark field
                         correction)
+  --metadata PATH       Add Channel/Plane level metadata from a CSV file into
+                        the resulting OME-TIFF file. The CSV file format:
+                        Channel#  Name   ExposureTime    ExposureTimeUnit   Fluor  etc.
+                        0         DAPI   20              ms                 DAPI   more columns for future use
+                        1         Chan1  100             ms                 FITC   ...
+                        2         Chan2  240             ms                 AF555  ...
+                        3         Chan3  150             ms                 Cy5    ...
+                        ...       ...    ...             ...                ...    ...
   --plates              Enable plate mode for HTS data
   -q, --quiet           Suppress progress display
   --version             Show program's version number and exit
