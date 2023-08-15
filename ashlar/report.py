@@ -13,6 +13,17 @@ import networkx as nx
 import numpy as np
 from PIL import Image
 import seaborn as sns
+import skimage.exposure
+
+
+cmap_yellow = mcolors.LinearSegmentedColormap(
+    name="a_yellow",
+    segmentdata={
+        'red': ((0, 0.1, 0.1), (1, 1, 1)),
+        'green': ((0, 0.1, 0.1), (1, 1, 1)),
+        'blue': ((0, 0, 0), (1, 0.8, 0.8)),
+    },
+)
 
 
 def generate_report(path, aligners):
@@ -58,7 +69,7 @@ def plot_edge_map(
     aligner,
     img=None,
     pos="metadata",
-    cmap="pink",
+    cmap=None,
     width=None,
     node_size=None,
     font_size=None,
@@ -73,6 +84,7 @@ def plot_edge_map(
         centers = aligner.centers
     else:
         raise ValueError("pos must be either 'metadata' or 'aligner'")
+    cmap = cmap or cmap_yellow
     im_kwargs = im_kwargs or {}
     nx_kwargs = nx_kwargs or {}
     fig, ax = plt.subplots()
@@ -95,8 +107,8 @@ def plot_edge_map(
     font_size = font_size or interp([6, 2])
     width = np.where(in_tree, width, width * 0.75)
     style = np.where(in_tree, "solid", "dotted")
-    cmap = copy.copy(mcm.Blues)
-    cmap.set_over((0.1, 0.1, 0.1))
+    edge_cmap = copy.copy(mcm.Blues)
+    edge_cmap.set_over((0.1, 0.1, 0.1))
     g = aligner.neighbors_graph
     pos = np.fliplr(centers)
     nx.draw_networkx_nodes(
@@ -115,7 +127,7 @@ def plot_edge_map(
         edge_color=error,
         edge_vmin=emin,
         edge_vmax=emax,
-        edge_cmap=cmap,
+        edge_cmap=edge_cmap,
         width=width,
         style=style,
         **nx_kwargs,
@@ -130,7 +142,7 @@ def plot_edge_map(
         )
         ax.add_patch(rect)
     cbar = fig.colorbar(
-        mcm.ScalarMappable(mcolors.Normalize(emin, emax), cmap),
+        mcm.ScalarMappable(mcolors.Normalize(emin, emax), edge_cmap),
         extend="max",
         label="Error (-log NCC)",
         location="right",
@@ -231,7 +243,7 @@ def plot_layer_quality(
         im_kwargs = {}
     fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img, **im_kwargs)
+    draw_mosaic_image(ax, aligner, img, cmap=cmap_yellow, **im_kwargs)
 
     h, w = aligner.metadata.size
     positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
