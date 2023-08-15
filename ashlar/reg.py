@@ -1332,6 +1332,16 @@ class PyramidWriter:
             metadata["Pixels"]["Channel"] = {}
             metadata["Pixels"]["Channel"]["Name"] = [ sub['Name'] for sub in self.metadata_list ]
             metadata["Pixels"]["Channel"]["Fluor"] = [ sub['Fluor'] for sub in self.metadata_list ]
+            col_list = [ sub['Color'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["Color"] = [ int.from_bytes(bytes.fromhex(i[1:]), byteorder="big", signed=True) for i in col_list ]
+            metadata["Pixels"]["Channel"]["PockelCellSetting"] = [ sub['Cycle'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["AcquisitionMode"] = [ sub['AcquisitionMode'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["IlluminationType"] = [ sub['IlluminationType'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["ContrastMethod"] = [ sub['ContrastMethod'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["ExcitationWavelength"] = [ sub['ExcitationWavelength'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["ExcitationWavelengthUnit"] = [ sub['ExcitationWavelengthUnit'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["EmissionWavelength"] = [ sub['EmissionWavelength'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["EmissionWavelengthUnit"] = [ sub['EmissionWavelengthUnit'] for sub in self.metadata_list ]
 
             # create Plane entry and fill it
             metadata["Pixels"]["Plane"] = {}
