@@ -43,6 +43,13 @@ def generate_report(path, aligners):
     pdf.add_figure(fig, "Cycle 1: Tile pair alignment quality")
     plt.close(fig)
 
+    for i, aligner in enumerate(aligners, 2):
+        pdf.add_page()
+        fig = plot_layer_map(aligner, aligner.reader.thumbnail)
+        fig.set_size_inches(7.5, 9)
+        pdf.add_figure(fig, f"Cycle {i}: Cycle alignment map")
+        plt.close(fig)
+
     pdf.output(path)
 
 
@@ -133,14 +140,7 @@ def plot_edge_map(
         **nx_kwargs,
     )
     nx.draw_networkx_labels(g, pos, ax=ax, font_size=font_size, **nx_kwargs)
-    rh, rw = aligner.metadata.size
-    for x, y in pos:
-        x -= rw / 2
-        y -= rh / 2
-        rect = mpatches.Rectangle(
-            (x, y), rw, rh, color='silver', alpha=0.25, fill=False, lw=0.25, zorder=0.5
-        )
-        ax.add_patch(rect)
+    draw_borders(ax, aligner, pos)
     cbar = fig.colorbar(
         mcm.ScalarMappable(mcolors.Normalize(emin, emax), edge_cmap),
         extend="max",
@@ -236,61 +236,121 @@ def plot_layer_shifts(aligner, img=None, im_kwargs=None):
     fig.set_facecolor('black')
 
 
-def plot_layer_quality(
-    aligner, img=None, scale=1.0, artist='patches', annotate=True, im_kwargs=None
+def plot_layer_map(
+    aligner,
+    img=None,
+    pos="metadata",
+    cmap=None,
+    width=None,
+    node_size=None,
+    font_size=None,
+    im_kwargs=None,
+    nx_kwargs=None,
 ):
-    if im_kwargs is None:
-        im_kwargs = {}
-    fig = plt.figure()
-    ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img, cmap=cmap_yellow, **im_kwargs)
+    """Plot tile shift distance and direction"""
 
-    h, w = aligner.metadata.size
-    positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
+    if pos == "metadata":
+        centers = aligner.metadata.centers - aligner.metadata.origin
+    elif pos == "aligner":
+        centers = aligner.centers
+    else:
+        raise ValueError("pos must be either 'metadata' or 'aligner'")
+    cmap = cmap or cmap_yellow
+    im_kwargs = im_kwargs or {}
+    nx_kwargs = nx_kwargs or {}
+    fig, ax = plt.subplots()
+    draw_mosaic_image(ax, aligner, img, cmap=cmap, **im_kwargs)
 
-    if scale != 1.0:
-        h, w, positions, centers, shifts = [
-            scale * i for i in [h, w, positions, centers, shifts]
-        ]
+    pixel_size = aligner.reader.metadata.pixel_size
+    shifts = np.linalg.norm(aligner.shifts, axis=1) * pixel_size
+    skeep = shifts[~aligner.discard]
+    smin, smax = (skeep.min(), skeep.max()) if len(skeep) > 0 else (0, 0)
+    # Map discards to the "over" color in the cmap.
+    shifts[aligner.discard] = smax + 1
+    # Reorder to match the graph's internal node ordering.
+    node_values = shifts[np.array(aligner.neighbors_graph)]
 
-    # Bounding boxes denoting new tile positions.
-    color_index = skimage.exposure.rescale_intensity(
-        aligner.errors, out_range=np.uint8
-    ).astype(np.uint8)
-    color_map = mcm.magma_r
-    for xy, c_idx in zip(np.fliplr(positions), color_index):
-        rect = mpatches.Rectangle(
-            xy, w, h, color=color_map(c_idx), fill=False, lw=0.5
+    diameter = nx.diameter(aligner.neighbors_graph)
+    drange = [10, 60]
+    interp = functools.partial(np.interp, diameter, drange)
+    node_size = node_size or interp([100, 8])
+    font_size = font_size or interp([6, 2])
+    node_cmap = mcm.Greens.with_extremes(over="#252525")
+    g = aligner.neighbors_graph
+    pos = np.fliplr(centers)
+    qlen = np.min(aligner.metadata.size) * 0.45
+    q_angles = np.rad2deg(np.arctan2(*(aligner.shifts * [-1, 1]).T))
+    reference_offset = (
+        aligner.cycle_offset
+        + aligner.metadata.origin
+        - aligner.reference_aligner.metadata.origin
+    )
+    reference_corners = (
+        aligner.reference_aligner.metadata.centers
+        - aligner.reference_aligner.metadata.origin
+        + aligner.reference_aligner.metadata.size / 2
+    )
+    reference_size = np.max(reference_corners, axis=0)
+
+    ax.add_patch(
+        mpatches.Rectangle(
+            -reference_offset[::-1],
+            *reference_size[::-1],
+            color=mcm.Blues(0.6),
+            lw=2,
+            linestyle="--",
+            fill=False,
         )
-        ax.add_patch(rect)
-    
-    # Annotate tile numbering.
-    if annotate:
-        for idx, (x, y) in enumerate(np.fliplr(positions)):
-            text = plt.annotate(str(idx), (x+0.1*w, y+0.9*h), alpha=0.7)
-            # Add outline to text for better contrast in different background color.
-            text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAA')
-            text.set_path_effects(
-                [text_outline, mpatheffects.Normal()]
-            )
-
-    if artist == 'quiver':
-        ax.quiver(
-            *centers.T[::-1], *shifts.T[::-1], aligner.discard,
-            units='dots', width=2, scale=1, scale_units='xy', angles='xy',
-            cmap='Greys'
-        )
-    if artist == 'patches':
-        for xy, dxy, is_discarded in zip(
-            np.fliplr(centers), np.fliplr(shifts), aligner.discard
-        ):
-            arrow = mpatches.FancyArrowPatch(
-                xy, np.array(xy) + np.array(dxy), 
-                arrowstyle='->', color='0' if is_discarded else '1',
-                mutation_scale=8,
-                )
-            ax.add_patch(arrow)
-    ax.axis('off')
+    )
+    ax.quiver(
+        pos[:, 0],
+        pos[:, 1],
+        [qlen] * len(pos),
+        [0] * len(pos),
+        shifts,
+        cmap=node_cmap,
+        clim=(smin, smax),
+        angles=q_angles,
+        scale_units="x",
+        scale=1,
+        headwidth=1,
+        headlength=1,
+        headaxislength=1,
+    )
+    nx.draw_networkx_nodes(
+        g,
+        pos,
+        ax=ax,
+        cmap=node_cmap,
+        vmin=smin,
+        vmax=smax,
+        node_color=node_values,
+        node_size=node_size,
+        edgecolors=None,
+        **nx_kwargs,
+    )
+    draw_labels = functools.partial(
+        nx.draw_networkx_labels,
+        pos=pos,
+        ax=ax,
+        font_size=font_size,
+        **nx_kwargs,
+    )
+    draw_labels(g.subgraph(np.nonzero(aligner.discard)[0]), font_color="gray")
+    draw_labels(g.subgraph(np.nonzero(~aligner.discard)[0]), font_color="k")
+    draw_borders(ax, aligner, pos)
+    cbar = fig.colorbar(
+        mcm.ScalarMappable(mcolors.Normalize(smin, smax), node_cmap),
+        extend="max",
+        label="Shift (\xb5m)",
+        location="right",
+        shrink=0.5,
+        ax=ax,
+    )
+    ax.set_frame_on(False)
+    ax.margins(0)
+    fig.tight_layout()
+    return fig
 
 
 def draw_mosaic_image(ax, aligner, img, **kwargs):
@@ -303,3 +363,18 @@ def draw_mosaic_image(ax, aligner, img, **kwargs):
     if "vmax" not in kwargs:
         kwargs["vmax"] = np.percentile(img, 99)
     ax.imshow(img, extent=(-0.5, w-0.5, h-0.5, -0.5), **kwargs)
+
+
+def draw_borders(ax, aligner, pos):
+    rh, rw = aligner.metadata.size
+    for x, y in pos - (rw / 2, rh / 2):
+        rect = mpatches.Rectangle(
+            (x, y),
+            rw,
+            rh,
+            color=(0.2, 0.2, 0.2),
+            fill=False,
+            lw=0.25,
+            zorder=0.5,
+        )
+        ax.add_patch(rect)
