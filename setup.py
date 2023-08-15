@@ -18,7 +18,7 @@ requires = [
     'tifffile>=2023.3.15',
     'zarr>=2.11.3',
     'blessed>=1.17',
-    'pylibCZIrw>=3.5.1',
+    'pylibCZIrw>=3.5.0',
 ]
 
 

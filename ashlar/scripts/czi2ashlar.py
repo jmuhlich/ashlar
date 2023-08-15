@@ -172,7 +172,7 @@ def main():
     if verbose: print("Done with metadata extraction")
  
     # construct the argument list
-    arglist = ["--flip-y", "-o", args.output, "--metadata", out_path_csv]
+    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv]
     if args.quiet: arglist += ["-q"]
  
     arglist += filepaths
