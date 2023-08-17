@@ -13,7 +13,7 @@ Installing and running czi2ashlar, a wrapper around Jeremy Muhlich's ASHLAR pack
    c) ONLY ON MAC: `pip install pyjnius`       (needs to be done via pip upfront since there's no compatible package on condaforge)<br>
    d) `conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.19 scikit-learn "tifffile>=2023.3.15" zarr pyjnius blessed`<br>
    e) ON WINDOWS or LINUX: `pip install pylibCZIrw`<br>
-   <sp>   ON MAC: `pip install https://pypi.scm.io/api/package/pylibczirw/pylibCZIrw-3.5.1-cp310-cp310-macosx_12_0_universal2.whl#sha256=b2df07af9beb60c2356f888e1248353fdd3df59946603ede82405629bc06932b`<br>
+   ON MAC: `pip install https://pypi.scm.io/api/package/pylibczirw/pylibCZIrw-3.5.1-cp310-cp310-macosx_10_9_universal2.whl#sha256=9eb427f96cf4ae855deda50164e723e4685ad69adaf04b2831e856bd2c2144d6`<br>
    f) `pip install git+https://github.com/dsudar/ashlar.git@rotcor_metadata`
 
 3) Running the czi2ashlar app<br>
