@@ -16,7 +16,7 @@ images.
 
 ## CZI2ASHLAR
 A wrapper around the customized ASHLAR package to interpret OHSU-style cycIF file from the Axioscan scanner. It extracts metadata which gets injected into the ome.tif file by this ASHLAR fork.
-See:  for instructions.
+See:  https://github.com/dsudar/ashlar/blob/rotcor_metadata/docs/czi2ashlar.md for instructions.
 
 
 ## Usage
