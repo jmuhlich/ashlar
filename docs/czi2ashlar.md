@@ -1,16 +1,19 @@
 ## czi2ashlar instructions
 
 Installing and running czi2ashlar, a wrapper around Jeremy Muhlich's ASHLAR package (https://github.com/labsyspharm/ashlar) to interpret OHSU-style cycif multiplex image series acquired on Zeiss Axioscan scanners and inject metadata into the resulting OME-TIFF output.<br>
+NOTE: being tested on Linux, Mac x86 and arm64, not yet tested on Windows<br>
 
 0) Ensure your system has the development and runtime tools needed<br>
    a) ONLY ON MAC: Open a terminal window and install Apple's XCode developer tools: `xcode-select --install`<br>
 
 1) Install Mamba (the better/faster conda, see: https://mamba.readthedocs.io/en/latest/mamba-installation.html)<br>
+You can skip this step if you have some other Conda installed already<br>
    a) Open Terminal window<br>
    b) `curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"`<br>
    c) `bash Mambaforge-$(uname)-$(uname -m).sh`<br>
 
 2) Create a conda env and install custom ashlar, see: https://github.com/dsudar/ashlar/tree/rotcor_metadata<br>
+   -) Open Terminal window<br>
    a) `conda create -y -n ashlar python=3.10`<br>
    b) `conda activate ashlar`<br>
    c) ONLY ON MAC: `pip install pyjnius`       (needs to be done via pip upfront since there's no compatible package on condaforge)<br>
