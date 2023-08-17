@@ -1348,10 +1348,14 @@ class PyramidWriter:
             metadata["Pixels"]["Plane"]["ExposureTime"] = [ sub['ExposureTime'] for sub in self.metadata_list ]
             metadata["Pixels"]["Plane"]["ExposureTimeUnit"] = [ sub['ExposureTimeUnit'] for sub in self.metadata_list ]
 
+            # create private TIFF tag to indicate what the PockelCellSetting actually encodes, in this case it encodes Cycle info
+            extratags = [(44444, 's', 0, "cycle", True)]
+
         with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
             tiff.write(
                 data=self.base_tiles(),
                 metadata=metadata,
+                extratags=extratags,
                 software=software.encode("utf-8"),
                 shape=self.level_full_shapes[0],
                 subifds=int(self.num_levels - 1),
