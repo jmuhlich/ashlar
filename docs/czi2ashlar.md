@@ -2,6 +2,10 @@
 
 Installing and running czi2ashlar, a wrapper around Jeremy Muhlich's ASHLAR package to interpret OHSU-style cycif multiplex image series acquired on Zeiss Axioscan scanners and inject metadata into the resulting OME-TIFF output.<br>
 
+0) Ensure your system has the development and runtime tools needed<br>
+   a) ONLY ON MAC: Open a terminal windows and install Apple's XCode developer tools: `xcode-select --install`<br>
+   b) make sure you have a Java runtime environment version 8, 11, or 17. E.g. download the correct version for your platform and install: `https://www.oracle.com/java/technologies/downloads/#jdk17-linux`<br>
+
 1) Install Mamba (the better/faster conda, see: https://mamba.readthedocs.io/en/latest/mamba-installation.html)<br>
    a) Open Terminal window<br>
    b) `curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"`<br>
