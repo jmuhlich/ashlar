@@ -14,6 +14,11 @@ images.
 
 **Visit [labsyspharm.github.io/ashlar/](https://labsyspharm.github.io/ashlar/) for the most up-to-date information on ASHLAR.**
 
+## CZI2ASHLAR
+A wrapper around the customized ASHLAR package to interpret OHSU-style cycIF file from the Axioscan scanner. It extracts metadata which gets injected into the ome.tif file by this ASHLAR fork.
+See:  for instructions.
+
+
 ## Usage
 
 ```
