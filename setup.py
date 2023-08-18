@@ -130,4 +130,5 @@ setup(
     download_url='%s/archive/v%s.tar.gz' % (HOMEPAGE, VERSION),
     keywords=['scripts', 'microscopy', 'registration', 'stitching'],
     zip_safe=False,
+    scripts=['ashlar/scripts/batch_czi2ashlar'],
 )
