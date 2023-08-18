@@ -26,7 +26,7 @@ do
         echo "Running sample ID =  $id"
 	echo "   files: " R*_${id}_*.czi
         outfile="${arg}_$id.ome.tif"
-        # czi2ashlar -o $outfile R*_${id}_*.czi
+        czi2ashlar -o $outfile R*_${id}_*.czi
     done
     cd ..
 done
