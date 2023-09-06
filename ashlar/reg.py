@@ -906,9 +906,10 @@ class LayerAligner(object):
         # positions to reference aligner positions, due to strong
         # self-correlation of the sensor dark current pattern which dominates in
         # low-signal images.
-        discard = (position_diffs == 0).all(axis=1)
+        self.discard_camera_bg = (position_diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
-        discard |= np.isinf(self.errors)
+        self.discard_error = np.isinf(self.errors)
+        discard = self.discard_camera_bg | self.discard_error
         # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
         if discard.all():
@@ -922,9 +923,9 @@ class LayerAligner(object):
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
         max_dist = self.max_shift_pixels
-        extremes = distance > max_dist
+        self.discard_distance = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
-        discard |= extremes
+        discard |= self.discard_distance
         self.discard = discard
         if discard.all():
             self.offset = 0
