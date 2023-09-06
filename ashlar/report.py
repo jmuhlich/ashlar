@@ -115,8 +115,7 @@ def plot_edge_map(
     font_size = font_size or interp([6, 2])
     width = np.where(in_tree, width, width * 0.75)
     style = np.where(in_tree, "solid", "dotted")
-    edge_cmap = copy.copy(mcm.Blues)
-    edge_cmap.set_over((0.1, 0.1, 0.1))
+    edge_cmap = mcm.Blues.with_extremes(over="#333333")
     g = aligner.neighbors_graph
     pos = np.fliplr(centers)
     nx.draw_networkx_nodes(
@@ -222,7 +221,7 @@ def plot_edge_quality(aligner, annotate=True):
             aligner.neighbors_graph.edges, xdata, ydata, sparse
         ):
             if s:
-                g.ax_joint.annotate(str(pair), (x, y), alpha=0.25, size=6)
+                g.ax_joint.annotate(str(pair), (x, y), alpha=0.5, size=6)
     g.figure.tight_layout()
     return g.figure
 
@@ -286,7 +285,7 @@ def plot_layer_map(
     interp = functools.partial(np.interp, diameter, drange)
     node_size = node_size or interp([100, 8])
     font_size = font_size or interp([6, 2])
-    node_cmap = mcm.Greens.with_extremes(over="#252525")
+    node_cmap = mcm.Greens.with_extremes(over="#333333")
     g = aligner.neighbors_graph
     pos = np.fliplr(centers)
     qlen = np.min(aligner.metadata.size) * 0.45
