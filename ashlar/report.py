@@ -288,7 +288,8 @@ def plot_layer_map(
     node_cmap = mcm.Greens.with_extremes(over="#333333")
     g = aligner.neighbors_graph
     pos = np.fliplr(centers)
-    qlen = np.min(aligner.metadata.size) * 0.45
+    qlen = np.repeat(np.min(aligner.metadata.size) * 0.45, len(pos))
+    qlen[aligner.discard_camera_bg | aligner.discard_error] = 0
     q_angles = np.rad2deg(np.arctan2(*(aligner.shifts * [-1, 1]).T))
     reference_offset = (
         aligner.cycle_offset
@@ -315,7 +316,7 @@ def plot_layer_map(
     ax.quiver(
         pos[:, 0],
         pos[:, 1],
-        [qlen] * len(pos),
+        qlen,
         [0] * len(pos),
         shifts,
         cmap=node_cmap,
@@ -327,28 +328,42 @@ def plot_layer_map(
         headlength=1,
         headaxislength=1,
     )
-    nx.draw_networkx_nodes(
-        g,
-        pos,
-        ax=ax,
-        cmap=node_cmap,
-        vmin=smin,
-        vmax=smax,
-        node_color=node_values,
-        node_size=node_size,
-        edgecolors=None,
-        **nx_kwargs,
-    )
-    draw_labels = functools.partial(
-        nx.draw_networkx_labels,
-        pos=pos,
-        ax=ax,
-        font_size=font_size,
-        **nx_kwargs,
-    )
-    draw_labels(g.subgraph(np.nonzero(aligner.discard)[0]), font_color="gray")
-    draw_labels(g.subgraph(np.nonzero(~aligner.discard)[0]), font_color="k")
+
+    def subgraph(cond):
+        return g.subgraph(np.nonzero(cond)[0])
+
+    def draw_nodes(cond, **kwargs):
+        nx.draw_networkx_nodes(
+            subgraph(cond),
+            pos=pos,
+            ax=ax,
+            cmap=node_cmap,
+            vmin=smin,
+            vmax=smax,
+            node_color=node_values[cond[np.array(aligner.neighbors_graph)]],
+            node_size=node_size,
+            edgecolors=None,
+            **nx_kwargs,
+            **kwargs,
+        )
+
+    def draw_labels(cond, **kwargs):
+        nx.draw_networkx_labels(
+            subgraph(cond),
+            pos=pos,
+            ax=ax,
+            font_size=font_size,
+            **nx_kwargs,
+            **kwargs,
+        )
+
+    draw_nodes(aligner.discard_camera_bg, node_shape="s")
+    draw_nodes(aligner.discard_error, node_shape="D")
+    draw_nodes(~aligner.discard | aligner.discard_distance, node_shape="o")
+    draw_labels(aligner.discard, font_color="gray")
+    draw_labels(~aligner.discard, font_color="k")
     draw_borders(ax, aligner, pos)
+
     cbar = fig.colorbar(
         mcm.ScalarMappable(mcolors.Normalize(smin, smax), node_cmap),
         extend="max",
@@ -357,9 +372,11 @@ def plot_layer_map(
         shrink=0.5,
         ax=ax,
     )
+
     ax.set_frame_on(False)
     ax.margins(0)
     fig.tight_layout()
+
     return fig
 
 
