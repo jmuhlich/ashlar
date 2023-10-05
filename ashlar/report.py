@@ -199,7 +199,7 @@ def plot_edge_quality(aligner, annotate=True):
     tree = sklearn.neighbors.KDTree(dens_data)
     sparse = tree.query(dens_data, k=5)[0][:, -1] > 0.02
     g = sns.JointGrid(x=xdata, y=ydata)
-    g.plot_joint(sns.scatterplot, alpha=0.5, ec="none", ax=g.ax_joint)
+    g.plot_joint(sns.scatterplot, alpha=0.5, edgecolor="none", ax=g.ax_joint)
     histplot = functools.partial(
         sns.histplot,
         bins=40,
