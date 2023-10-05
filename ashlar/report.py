@@ -37,12 +37,14 @@ def generate_report(path, aligners):
     fig.set_size_inches(7.5, 9)
     pdf.add_figure(fig, "Cycle 1: Tile pair alignment map")
     plt.close(fig)
+    add_doc_link(pdf)
 
     pdf.add_page()
     fig = plot_edge_quality(aligner0)
     fig.set_size_inches(7.5, 7.5)
     pdf.add_figure(fig, "Cycle 1: Tile pair alignment quality")
     plt.close(fig)
+    add_doc_link(pdf)
 
     for i, aligner in enumerate(aligners, 2):
         pdf.add_page()
@@ -50,8 +52,20 @@ def generate_report(path, aligners):
         fig.set_size_inches(7.5, 9)
         pdf.add_figure(fig, f"Cycle {i}: Cycle alignment map")
         plt.close(fig)
+        add_doc_link(pdf)
 
     pdf.output(path)
+
+
+def add_doc_link(pdf):
+    pdf.write(txt="For documentation on how to interpret this plot, please see\n")
+    with pdf.local_context():
+        pdf.set_text_color(0, 0, 255)
+        pdf.set_font(style="U")
+        pdf.write(
+            txt="https://labsyspharm.github.io/ashlar/instructions/qc-report.html",
+            link="https://labsyspharm.github.io/ashlar/instructions/qc-report.html",
+        )
 
 
 class PDF(fpdf.FPDF):
