@@ -180,6 +180,10 @@ def main(argv=sys.argv):
         print_error("--tile-size can only be used with OME-TIFF output")
         return 1
 
+    if args.plates and args.report:
+        print_error("--plates and --report cannot be used together yet")
+        return 1
+
     ffp_paths = args.ffp
     if ffp_paths:
         if len(ffp_paths) not in (0, 1, len(filepaths)):
@@ -222,7 +226,6 @@ def main(argv=sys.argv):
 
     try:
         if args.plates:
-            # FIXME handle report
             return process_plates(
                 filepaths, output_path, args.filename_format, args.flip_x,
                 args.flip_y, ffp_paths, dfp_paths, args.barrel_correction,
