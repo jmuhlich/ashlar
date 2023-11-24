@@ -24,9 +24,10 @@ do
     for id in ${idlist[@]}
     do
         echo "Running sample ID =  $id"
-	echo "   files: " R*_${id}_*.czi
+        infiles=`ls -v R*_${id}_*.czi | tr '\n' ' '`
+	echo "   files: " ${infiles}
         outfile="${arg}_$id.ome.tif"
-        czi2ashlar -o $outfile R*_${id}_*.czi
+        czi2ashlar -o $outfile ${infiles}
     done
     cd ..
 done
