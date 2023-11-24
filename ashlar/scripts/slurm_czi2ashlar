@@ -1,0 +1,102 @@
+#!/bin/bash
+
+pattern="^R([0-9]+)_([a-zA-Z0-9\-]+)\.([a-zA-Z0-9\-]+)\.([a-zA-Z0-9\-]+)\.?([a-zA-Z0-9\-]+)?_?([a-zA-Z0-9\-]+)?_.*\.czi$"
+
+while getopts "v" opt; do
+    case $opt in
+        v)
+            echo "Verbose mode is enabled" >&2
+            verbose=1
+            ;;
+        \?)
+            echo "Invalid option -$OPTARG" >&2
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument" >&2
+            exit 1
+            ;;
+     esac
+done
+shift "$(($OPTIND -1))"
+
+anyopts=""
+if [[ $verbose = 1 ]]; then anyopts="${anyopts} -v "; fi
+
+echo "number of data sets to convert:" $#
+
+user=$USER
+
+# build the sbatch script
+echo "#!/bin/bash" > /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --partition=exacloud" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --nodes=1 #request 1 node per" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --tasks-per-node=1 ##we want our node to do 1 task at the same time" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --cpus-per-task=4 ##ask for 4 CPUs per task" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --mem-per-cpu=8gb ## request 8 gigabyte per cpu" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --time=12:00:00 ## ask for max 12 hours on the node" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --output=czi2ashlar_batchout.txt" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --open-mode=append" >> /tmp/czi2ashlar_sbatch_$user.sh
+printf "#SBATCH --mail-user=%s@ohsu.edu\n" $user >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH --mail-type=END" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "#SBATCH " >> /tmp/czi2ashlar_sbatch_$user.sh
+
+declare -a in_array
+declare -a out_array
+# declare -a opt_array
+count=0
+
+# create output locations and build the filename arrays
+for arg in "$@"
+do
+    echo "Processing data set: $arg"
+    cd $arg
+
+    idlist=()
+    for fn in `ls R0*.czi`
+    do
+        if [[ "$fn" =~ $pattern ]]
+        then
+            id=${BASH_REMATCH[6]}
+            echo "Found sample ID =  $id"
+            idlist+=($id )
+        else
+            echo "file $fn doesn't match the naming pattern"
+        fi
+    done
+
+    # put  each id on the array for czi2ashlar to run
+    for id in ${idlist[@]}
+    do
+	name=`basename "${arg}"`
+	dirname=`dirname "${arg}"`
+	#echo "Adding file: ${name} to queue"
+	bname=`echo $name | sed 's/\..*//g'`
+	#echo "bname: ${bname}"
+
+        echo "Adding to queue: sample ID =  $id with files:"
+        ls -v1 R*_${id}_*.czi
+        echo ""
+#        outfile="${arg}_$id.ome.tif"
+#        czi2ashlar -o $outfile R*_${id}_*.czi
+
+        inlist=`cd ..; ls -v ${arg}/R*_${id}_*.czi | tr '\n' ' '`
+	in_array[count]="\"${inlist}\""
+	out_array[count]="\"-o ${dirname}/${bname}/${arg}_${id}.ome.tif\""
+	let "count += 1"
+    done
+    cd ..
+
+
+done
+
+# declare the in and out arrays and set up srun with an array task list
+echo "in_array=(${in_array[*]})" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "out_array=(${out_array[*]})" >> /tmp/czi2ashlar_sbatch_$user.sh
+# echo "opt_array=(${opt_array[*]})" >> /tmp/czi2ashlar_sbatch_$user.sh
+echo "srun czi2ashlar ${anyopts}  \${in_array[\$SLURM_ARRAY_TASK_ID]} \${out_array[\$SLURM_ARRAY_TASK_ID]}" >> /tmp/czi2ashlar_sbatch_$user.sh
+
+let "count -= 1"
+# now submit it to sbatch
+sbatch --array=0-${count} /tmp/czi2ashlar_sbatch_$user.sh
+
