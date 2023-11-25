@@ -33,7 +33,6 @@ ON WINDOWS: Install Anaconda (from: https://www.anaconda.com/download )<br>
    a) `conda activate ashlar`<br>
    b) continue with step 3<br>
 
-Notes: the czi2ashlar package also contains 2 batch processing scripts:<br>
-   a) batch-czi2ashlar: a simply bash scripts to run mczi2ashlar on multiple datasets in separate directories or combined in one directory
-   b) slurm-czi2ashlar: a script specifically written for the OHSU exacloud cluster which does the same as batch-czi2ashlar but runs the tasks in parallel
-   
+Note: the czi2ashlar package also contains 2 batch processing scripts:<br>
+   a) batch-czi2ashlar: a simply bash scripts to run mczi2ashlar on multiple datasets in separate directories or combined in one directory<br>
+   b) slurm-czi2ashlar: a script specifically written for the OHSU exacloud cluster which does the same as batch-czi2ashlar but runs the tasks in parallel<br>
