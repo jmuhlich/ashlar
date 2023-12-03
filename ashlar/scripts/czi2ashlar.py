@@ -53,7 +53,7 @@ def main():
     out_path_csv = '{}.csv'.format(args.output)
  
     # the regex pattern of the single channel registered tif files
-    cycif_pattern=re.compile("^R([0-9]+)_([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.?([a-zA-Z0-9-]+)?_?([a-zA-Z]?)([0-9]+)?_([a-zA-Z0-9-_()]+).czi")
+    cycif_pattern=re.compile("^R([0-9]+)_([a-zA-Z0-9-]+)\.?([a-zA-Z0-9-]+)?\.?([a-zA-Z0-9-]+)?\.?([a-zA-Z0-9-]+)?_?([a-zA-Z]?)([0-9]+)?_([a-zA-Z0-9-_()]+).czi")
  
     # csv file collects metadata extracted from filenames
     of = open(out_path_csv, "w")
