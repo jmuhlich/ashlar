@@ -205,13 +205,18 @@ def plot_edge_quality(aligner, annotate=True):
         * aligner.metadata.pixel_size
     )
     pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
-    # Identify points in sparse regions of figure space by computing whether
-    # each point's 5th nearest neighbor is more then 2% of the figure width
-    # away. (Using k=5 allows clusters of a few points to be considered sparse)
-    dens_data = np.vstack([xdata, np.log(ydata)]).T
-    dens_data /= np.linalg.norm(np.ptp(dens_data, axis=0))
-    tree = sklearn.neighbors.KDTree(dens_data)
-    sparse = tree.query(dens_data, k=5)[0][:, -1] > 0.02
+    if len(xdata) >= 10:
+        # Identify points in sparse regions of figure space by computing whether
+        # each point's 5th nearest neighbor is more then 2% of the figure width
+        # away. (Using k=5 allows clusters of a few points to be considered sparse)
+        dens_data = np.vstack([xdata, np.log(ydata)]).T
+        dens_data /= np.linalg.norm(np.ptp(dens_data, axis=0))
+        tree = sklearn.neighbors.KDTree(dens_data)
+        adata = tree.query(dens_data, k=5)[0][:, -1] > 0.02
+    else:
+        # With few enough points, annotate them all. (nearest neighbor query
+        # fails with fewer than k points, anyway)
+        adata = np.ones(len(xdata), bool)
     g = sns.JointGrid(x=xdata, y=ydata)
     g.plot_joint(sns.scatterplot, alpha=0.5, edgecolor="none", ax=g.ax_joint)
     histplot = functools.partial(
@@ -231,10 +236,10 @@ def plot_edge_quality(aligner, annotate=True):
     g.ax_marg_y.axhline(aligner.max_shift, c="k", ls=":")
     g.set_axis_labels("Error (-log NCC)", "Shift distance (\u00B5m)")
     if annotate:
-        for pair, x, y, s in zip(
-            aligner.neighbors_graph.edges, xdata, ydata, sparse
+        for pair, x, y, a in zip(
+            aligner.neighbors_graph.edges, xdata, ydata, adata
         ):
-            if s:
+            if a:
                 g.ax_joint.annotate(str(pair), (x, y), alpha=0.5, size=6)
     g.figure.tight_layout()
     return g.figure
