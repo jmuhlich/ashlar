@@ -39,6 +39,11 @@ def main():
             help="Provide a path/name for the output OME-TIFF file",
             )
     parser.add_argument(
+            '-c', '--align-channel', dest='align_channel', type=int,
+            default='0', metavar='CHANNEL',
+            help="Reference channel number for image alignment. Numbering starts at 0.",
+            )
+    parser.add_argument(
             "-q", "--quiet", dest="quiet",
             help="Suppress verbose status and progress display", action="store_true", default=False,
             )
@@ -48,6 +53,8 @@ def main():
     filepaths = args.filepaths
  
     verbose = not args.quiet
+    
+    align_chan = args.align_channel
  
     # create a name/path for the csv output file
     out_path_csv = '{}.csv'.format(args.output)
@@ -172,7 +179,7 @@ def main():
     if verbose: print("Done with metadata extraction")
  
     # construct the argument list
-    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv]
+    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv, "-c", align_chan]
     if args.quiet: arglist += ["-q"]
  
     arglist += filepaths

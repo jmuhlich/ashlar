@@ -1,19 +1,24 @@
 #!/bin/bash
 
-pattern="^R([0-9]+)_([a-zA-Z0-9\-]+)\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?_?([a-zA-Z0-9\-]+)?_.*\.czi$"
+pattern="^R([0-9]+)_([a-zA-Z0-9\-]+)\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?_?([a-zA-Z0-9\-]+)?_?.*\.czi$"
+channel=0
 
-while getopts "v" opt; do
+while getopts ":qc:" opt; do
     case $opt in
-        v)
-            echo "Verbose mode is enabled" >&2
-            verbose=1
+        q)
+            echo "Quiet mode is enabled" >&2
+            quiet=true
             ;;
-        \?)
-            echo "Invalid option -$OPTARG" >&2
+		c)
+			echo "Aligning on channel $OPTARG" >&2
+			channel=$OPTARG
+			;;
+        :)
+            echo "Option -${OPTARG} requires an argument" >&2
             exit 1
             ;;
-        :)
-            echo "Option -$OPTARG requires an argument" >&2
+		?)
+            echo "Invalid option -${OPTARG}." >&2
             exit 1
             ;;
      esac
@@ -21,7 +26,8 @@ done
 shift "$(($OPTIND -1))"
 
 anyopts=""
-if [[ $verbose = 1 ]]; then anyopts="${anyopts} -v "; fi
+if [ $quiet ]; then anyopts="${anyopts} -q "; fi
+if [ $channel ] then anyopts="${anyopts} -c $channel "; fi
 
 echo "number of data sets to convert:" $#
 
@@ -53,7 +59,7 @@ do
     cd $arg
 
     idlist=()
-    for fn in `ls R0*.czi`
+    for fn in `ls R1*.czi`
     do
         if [[ "$fn" =~ $pattern ]]
         then
@@ -75,12 +81,12 @@ do
 	#echo "bname: ${bname}"
 
         echo "Adding to queue: sample ID =  $id with files:"
-        ls -v1 R*_${id}_*.czi
+        ls -v1 R*_${id}*.czi
         echo ""
 #        outfile="${arg}_$id.ome.tif"
-#        czi2ashlar -o $outfile R*_${id}_*.czi
+#        czi2ashlar -o $outfile R*_${id}*.czi
 
-        inlist=`cd ..; ls -v ${arg}/R*_${id}_*.czi | tr '\n' ' '`
+        inlist=`cd ..; ls -v ${arg}/R*_${id}*.czi | tr '\n' ' '`
 	in_array[count]="\"${inlist}\""
 	out_array[count]="\"-o ${dirname}/${bname}/${arg}_${id}.ome.tif\""
 	let "count += 1"
