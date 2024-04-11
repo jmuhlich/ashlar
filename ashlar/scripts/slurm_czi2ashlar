@@ -9,15 +9,15 @@ while getopts ":qc:" opt; do
             echo "Quiet mode is enabled" >&2
             quiet=true
             ;;
-		c)
-			echo "Aligning on channel $OPTARG" >&2
-			channel=$OPTARG
-			;;
+        c)
+            echo "Aligning on channel $OPTARG" >&2
+            channel=$OPTARG
+            ;;
         :)
             echo "Option -${OPTARG} requires an argument" >&2
             exit 1
             ;;
-		?)
+        ?)
             echo "Invalid option -${OPTARG}." >&2
             exit 1
             ;;
