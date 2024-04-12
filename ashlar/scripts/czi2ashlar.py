@@ -179,12 +179,12 @@ def main():
     if verbose: print("Done with metadata extraction")
  
     # construct the argument list
-    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv, "-c", align_chan]
+    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv, "-c", str(align_chan)]
     if args.quiet: arglist += ["-q"]
  
     arglist += filepaths
 
-    print(arglist)
+    # print(arglist)
     ashlar_main(arglist)
  
 if __name__ == '__main__':
