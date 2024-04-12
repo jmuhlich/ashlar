@@ -184,7 +184,7 @@ def main():
  
     arglist += filepaths
 
-    # print(arglist)
+    print(arglist)
     ashlar_main(arglist)
  
 if __name__ == '__main__':
