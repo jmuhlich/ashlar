@@ -1,17 +1,17 @@
 #!/bin/bash
 
 pattern="^R([0-9]+)_([a-zA-Z0-9\-]+)\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?_?([a-zA-Z0-9\-]+)?_?.*\.czi$"
-channel=0
+anyopts=""
 
 while getopts ":qc:" opt; do
     case $opt in
         q)
             echo "Quiet mode is enabled" >&2
-            quiet=true
+            anyopts="${anyopts} -q "
             ;;
         c)
             echo "Aligning on channel $OPTARG" >&2
-            channel=$OPTARG
+            anyopts="${anyopts} -c $OPTARG "
             ;;
         :)
             echo "Option -${OPTARG} requires an argument" >&2
@@ -25,11 +25,7 @@ while getopts ":qc:" opt; do
 done
 shift "$(($OPTIND -1))"
 
-anyopts=""
-if [ $quiet ]; then anyopts="${anyopts} -q "; fi
-if [ $channel ] then anyopts="${anyopts} -c $channel "; fi
-
-echo "number of data sets to convert:" $#
+echo "number of data sets to process with ASHLAR:" $#
 
 user=$USER
 
