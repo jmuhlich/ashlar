@@ -404,6 +404,9 @@ class BioformatsReader(PlateReader):
 
     def read(self, series, c):
         self.metadata._reader.setSeries(self.metadata.active_series[series])
+        # if c is out of range, assume that last channel was intended
+        if c < 0 or c > self.metadata.num_channels - 1:
+            c = self.metadata.num_channels - 1
         index = self.metadata._reader.getIndex(0, c, 0)
         byte_array = self.metadata._reader.openBytes(index)
         dtype = self.metadata.pixel_dtype
