@@ -21,10 +21,11 @@ def main():
     # 
 
     # The arguments:
-    # 1. Get the list of individual CZI files
-    # 3. Options:
-    #       -o out.ome.tif: output path of where to save the resulting OME-TIFF file and CSV metadata table.
-    #       -q stops verbose output
+    #       the list of individual CZI files
+    # options:
+    #       -o out.ome.tif : output path of where to save the resulting OME-TIFF file and CSV metadata table
+    #       -c channel : channel to use as the reference for alignment
+    #       -q : stops verbose output
 
     # command line processing of arguments
     parser = argparse.ArgumentParser(
@@ -179,7 +180,7 @@ def main():
     if verbose: print("Done with metadata extraction")
  
     # construct the argument list
-    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv, "-c", align_chan]
+    arglist = ["-q", "--flip-y", "-o", args.output, "--metadata", out_path_csv, "-c", str(align_chan)]
     if args.quiet: arglist += ["-q"]
  
     arglist += filepaths
