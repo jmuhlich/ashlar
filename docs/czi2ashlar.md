@@ -26,7 +26,9 @@ ON WINDOWS: Install Anaconda (from: https://www.anaconda.com/download )<br>
 
 3) Running the czi2ashlar app<br>
    a) cd to the directory with the czi files<br>
-   b) `czi2ashlar -o outputfile.ome.tif file1 file2 file3 ....`  (you can use wildcards for the files, and NOTE: the OHSU naming scheme `R<cycle_number>_marker1.marker2.marker3.marker4_<other_stuff>` is required)<br>
+   b) `czi2ashlar -o outputfile.ome.tif file1 file2 file3 ....`  (you can use wildcards for the files)<br>
+          NOTE 1: the OHSU naming scheme `R<cycle_number>_marker1.marker2.marker3.marker4_<other_stuff>` is required) <br>
+          NOTE 2: if the counterstain (e.g. DAPI) is NOT the first channel, use `-c chan# ` to indicate the channel to use for alignment, the value `-1` indicates the last channel in each cycle <br>
    c) the resulting single outputfile.ome.tif file has all the channels and rich metadata that can be read by QiTissue and other software (e.g. QuPath)<br>
 
 4) Next time you want to run it<br>
