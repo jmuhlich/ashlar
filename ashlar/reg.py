@@ -12,6 +12,7 @@ import skimage.util
 import skimage.util.dtype
 import skimage.io
 import skimage.exposure
+import skimage.filters
 import skimage.transform
 import sklearn.linear_model
 import networkx as nx
@@ -509,6 +510,7 @@ class EdgeAligner(object):
     def run(self):
         self.make_thumbnail()
         self.check_overlaps()
+        self.identify_foreground()
         self.compute_threshold()
         self.register_all()
         self.build_spanning_tree()
@@ -537,6 +539,14 @@ class EdgeAligner(object):
             warn_data("No tiles overlap, attempting alignment anyway.")
         elif any(failures):
             warn_data("Some neighboring tiles have zero overlap.")
+
+    def identify_foreground(self):
+        energies = np.array([
+            np.linalg.norm(utils.whiten(self.reader.read(i, self.channel), 0))
+            for i in range(self.metadata.num_images)
+        ])
+        threshold = skimage.filters.threshold_otsu(energies)
+        self.foreground = energies > threshold
 
     def compute_threshold(self):
         if self.max_error is not None:
