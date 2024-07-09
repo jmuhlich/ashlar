@@ -925,21 +925,29 @@ class LayerAligner(object):
         self.positions = self.centers - self.metadata.size / 2
 
     def constrain_centers(self):
-        diffs = np.absolute(
-            self.centers - self.reference_aligner_centers
-        )
+        """Correct outlier alignments by extrapolating from inliers."""
+        # We consider outliers to be any alignment that's more than
+        # max_shift_pixels away from the "prior" established by the linear model
+        # fitted in the reference aligner. TODO finish this...
+
+        # For tiles containing only background, strong self-correlation of the
+        # camera sensor fixed-pattern noise will lead to a spurious alignment of
+        # 0,0 relative to the images themselves. 
+
+        # Compute alignment shift distances relative to the raw images.
+        diffs = np.linalg.norm(self.centers - self.reference_aligner_centers)
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling and thus only accurate to that level.
         diffs = np.rint(diffs * 10) / 10
-        # Discard camera background registration which will shift target
-        # positions to reference aligner positions, due to strong
-        # self-correlation of the sensor dark current pattern which dominates in
-        # low-signal images.
-        discard = (diffs == 0).all(axis=1)
-        # Discard any tile registration that error is infinite
-        discard |= np.isinf(self.errors)
-        # Take the median of registered shifts to determine the offset
-        # (translation) from the reference image to this one.
+        ref_background = ~self.reference_aligner.foreground[self.reference_idx]
+        discard_noise = (diffs == 0) & ref_background
+        # Discard alignments with infinite error.
+        discard_error = np.isinf(self.errors)
+        discard = discard_noise | discard_error
+
+        # For the high-quality alignments only, take the median of registered
+        # shifts to determine the overall global offset (translation) from the
+        # reference image to this one.
         if discard.all():
             offset = 0
         else:
@@ -958,6 +966,7 @@ class LayerAligner(object):
         # Recalculate the mean shift, also ignoring the extreme values.
         discard |= extremes
         self.discard = discard
+
         if discard.all():
             self.offset = 0
         else:
