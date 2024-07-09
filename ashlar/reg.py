@@ -1004,7 +1004,9 @@ class LayerAligner(object):
         if self.verbose:
             print(f"    refined cycle rotation = {angle:.2f} degrees")
         self.cycle_angle_fine = angle
-        self.tform_rotation = skimage.transform.AffineTransform(rotation=angle)
+        self.tform_rotation = skimage.transform.AffineTransform(
+            rotation=np.deg2rad(angle),
+        )
 
     def intersection(self, t):
         center_a = self.reference_centers[t]
