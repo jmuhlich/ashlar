@@ -988,12 +988,16 @@ class LayerAligner(object):
 
     def refine_cycle_angle(self):
         n = self.metadata.num_images
+        ref_foreground = self.reference_aligner.foreground[self.reference_idx]
         angles = np.empty(n)
         for i in range(n):
             if self.verbose:
                 sys.stdout.write("\r    aligning tile angle %d/%d" % (i + 1, n))
                 sys.stdout.flush()
-            angles[i] = self.register_angle(i)
+            if ref_foreground[i]:
+                angles[i] = self.register_angle(i)
+            else:
+                angles[i] = np.nan
         if self.verbose:
             print()
         angle = np.nanmedian(angles)
