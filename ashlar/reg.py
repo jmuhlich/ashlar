@@ -983,14 +983,18 @@ class LayerAligner(object):
         # Add back in the fractional position difference that overlap() loses.
         # TODO How does rotation affect this?
         shift = tuple(shift + its.offset_diff_frac)
-        # We don't use padding and thus can skip the math to account for it.
-        assert (its.padding == 0).all(), "Unexpected non-zero padding"
+        # We don't use padding and thus can skip the math to account for it, but
+        # we will assert this just to make sure.
+        if error < np.inf and all(its.shape > 1):
+            # Skip assertion if error is infinite, indicating a degenerate
+            # Intersection that won't be usable anyway.
+            assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
 
     def register_angle(self, t):
         """Return relative rotation angle between images."""
         its, ref_img, img = self.overlap(t)
-        if np.any(np.array(its.shape) == 0):
+        if np.any(np.array(its.shape) <= 1):
             return np.nan
         angle = utils.register_angle(ref_img, img, self.filter_sigma)
         return angle
@@ -1023,7 +1027,6 @@ class LayerAligner(object):
         corners1 = np.vstack([center_a, center_b]) - self.reader.metadata.size / 2
         corners2 = corners1 + self.reader.metadata.size
         its = Intersection(corners1, corners2)
-        its.shape = its.shape // 32 * 32
         return its
 
     def overlap(self, t):
