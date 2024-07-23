@@ -51,7 +51,7 @@ def main():
  
     args = parser.parse_args()
  
-    filepaths = args.filepath
+    filepaths = args.filepaths
 
     verbose = not args.quiet
     
