@@ -104,18 +104,20 @@ def main():
 
             max_chan = int(md_dict['ImageDocument']['Metadata']['Information']['Image']['SizeC'])
             if align_chan > max_chan - 1 or align_chan < 0:
-                align_chan = max_chan - 1
+                dapi_chan = max_chan - 1
+            else:
+                dapi_chan = align_chan
  
             # create entry for a numbered DAPI channel
-            exp_time = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['ExposureTime']) / 1000000.0
-            fluor = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['Fluor']
-            acq_mode = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['AcquisitionMode']
-            illum_type = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['IlluminationType']
-            con_meth = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['ContrastMethod']
-            color = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['Color']
-            ex_wave = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['ExcitationWavelength'])
-            em_wave = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['EmissionWavelength'])
-            dapi_line = "DAPI%d,%d,%d,%f,ms,%s,%s,%s,%s,%f,nm,%f,nm,%s" % (cycle, cycle, align_chan, exp_time, fluor, acq_mode, illum_type, con_meth, ex_wave, em_wave, color )
+            exp_time = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['ExposureTime']) / 1000000.0
+            fluor = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['Fluor']
+            acq_mode = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['AcquisitionMode']
+            illum_type = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['IlluminationType']
+            con_meth = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['ContrastMethod']
+            color = md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['Color']
+            ex_wave = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['ExcitationWavelength'])
+            em_wave = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][dapi_chan]['EmissionWavelength'])
+            dapi_line = "DAPI%d,%d,%d,%f,ms,%s,%s,%s,%s,%f,nm,%f,nm,%s" % (cycle, cycle, dapi_chan, exp_time, fluor, acq_mode, illum_type, con_meth, ex_wave, em_wave, color )
 
             chanindex = 0
             if align_chan == 0:
