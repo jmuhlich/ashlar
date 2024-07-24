@@ -101,6 +101,10 @@ def main():
  
             with pyczi.open_czi(fname) as czidoc:
                 md_dict = czidoc.metadata
+
+            max_chan = int(md_dict['ImageDocument']['Metadata']['Information']['Image']['SizeC'])
+            if align_chan > max_chan - 1 or align_chan < 0:
+                align_chan = max_chan - 1
  
             # create entry for a numbered DAPI channel
             exp_time = float(md_dict['ImageDocument']['Metadata']['Information']['Image']['Dimensions']['Channels']['Channel'][align_chan]['ExposureTime']) / 1000000.0
