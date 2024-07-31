@@ -63,8 +63,8 @@ def align_cycles(reader1, reader2, scale=0.05):
     if img1.shape != img2.shape:
         padded_shape = np.array((img1.shape, img2.shape)).max(axis=0)
         padded_img1, padded_img2 = np.zeros(padded_shape), np.zeros(padded_shape)
-        utils.paste(padded_img1, img1, [0, 0], 0)
-        utils.paste(padded_img2, img2, [0, 0], 0)
+        utils.paste(padded_img1, img1, (padded_shape - img1.shape) / 2, 0)
+        utils.paste(padded_img2, img2, (padded_shape - img2.shape) / 2, 0)
         img1 = padded_img1
         img2 = padded_img2
     angle = utils.register_angle(img1, img2, sigma=1)
@@ -72,7 +72,7 @@ def align_cycles(reader1, reader2, scale=0.05):
         print(f'\r    estimated cycle rotation = {angle:.2f} degrees')
         img2 = scipy.ndimage.rotate(img2, angle, reshape=False)
     offset = calculate_image_offset(img1, img2, int(1 / scale)) / scale
-    offset -= (reader2.metadata.origin - reader1.metadata.origin)
+    offset -= (reader2.metadata.center - reader1.metadata.center)
     print(f'\r    estimated cycle offset [y x] = {offset}')
     return offset, angle
 
