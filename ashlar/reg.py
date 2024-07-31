@@ -116,6 +116,11 @@ class Metadata(object):
         return self.positions + self.size / 2
 
     @property
+    def center(self):
+        outer_corner = np.max(self.positions + self.size, axis=0)
+        return np.mean([self.origin, outer_corner], axis=0)
+
+    @property
     def origin(self):
         return self.positions.min(axis=0)
 
@@ -845,7 +850,7 @@ class LayerAligner(object):
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.filter_sigma = filter_sigma
         self.verbose = verbose
-        self.cycle_angle_fine = 0
+        self.cycle_angle = 0
         # FIXME Still a bit muddled here on the use of metadata positions vs.
         # corrected positions from the reference aligner. We probably want to
         # use metadata positions to find the cycle-to-cycle tile
@@ -873,11 +878,7 @@ class LayerAligner(object):
             self.reader,
             scale=self.reference_aligner.reader.thumbnail_scale,
         )
-        mcorners = [
-            np.min(self.metadata.centers, axis=0),
-            np.max(self.metadata.centers, axis=0),
-        ]
-        mcenter = np.mean(mcorners, axis=0)
+        mcenter = self.metadata.center
         tform = skimage.transform.AffineTransform(
             rotation=np.deg2rad(self.cycle_angle),
         )
@@ -930,7 +931,7 @@ class LayerAligner(object):
         # 0,0 relative to the images themselves. 
 
         # Compute alignment shift distances relative to the raw images.
-        diffs = np.linalg.norm(self.centers - self.reference_aligner_centers)
+        diffs = np.linalg.norm(self.centers - self.reference_aligner_centers, axis=1)
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling and thus only accurate to that level.
         diffs = np.rint(diffs * 10) / 10
@@ -956,8 +957,7 @@ class LayerAligner(object):
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.centers - predictions - offset, axis=1)
-        max_dist = self.max_shift_pixels
-        extremes = distance > max_dist
+        extremes = distance > self.max_shift_pixels
         # Recalculate the mean shift, also ignoring the extreme values.
         discard |= extremes
         self.discard = discard
@@ -1008,13 +1008,15 @@ class LayerAligner(object):
                 angles[i] = np.nan
         if self.verbose:
             print()
-        angle = np.nanmedian(angles)
-        if self.verbose:
-            print(f"    refined cycle rotation = {angle:.2f} degrees")
-        self.cycle_angle_fine = angle
+        self.angles = angles
+        fine_adjustment = np.nanmedian(angles)
+        self.cycle_angle_coarse = self.cycle_angle
+        self.cycle_angle = self.cycle_angle_coarse + fine_adjustment
         self.tform_rotation = skimage.transform.AffineTransform(
-            rotation=np.deg2rad(angle),
+            rotation=np.deg2rad(self.cycle_angle),
         )
+        if self.verbose:
+            print(f"    refined cycle rotation = {self.cycle_angle:.2f} degrees")
 
     def intersection(self, t):
         center_a = self.reference_centers[t]
@@ -1031,9 +1033,9 @@ class LayerAligner(object):
             series=ref_t, c=self.reference_aligner.channel
         )
         img2 = self.reader.read(series=t, c=self.channel)
-        if self.cycle_angle_fine != 0:
+        if self.cycle_angle != 0:
             img2 = scipy.ndimage.rotate(
-                img2, self.cycle_angle_fine, reshape=False
+                img2, self.cycle_angle, reshape=False
             )
         # crop rounds the offsets to the nearest pixel, so the returned images
         # are not located at these precise locations.
@@ -1206,7 +1208,7 @@ class Mosaic(object):
                     f"out array shape {out.shape} does not match Mosaic"
                     f" shape {self.shape}"
                 )
-        angle = getattr(self.aligner, "cycle_angle_fine", 0)
+        angle = getattr(self.aligner, "cycle_angle", 0)
         for si, position in enumerate(self.aligner.positions):
             if self.verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
@@ -1641,5 +1643,8 @@ def plot_layer_quality(
 def draw_mosaic_image(ax, aligner, img, **kwargs):
     if img is None:
         img = [[0]]
-    h, w = aligner.mosaic_shape
+    try:
+        h, w = aligner.mosaic_shape
+    except AttributeError:
+        h, w = aligner.reference_aligner.mosaic_shape
     ax.imshow(img, extent=(-0.5, w-0.5, h-0.5, -0.5), **kwargs)
