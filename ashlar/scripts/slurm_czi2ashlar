@@ -55,7 +55,7 @@ do
     cd $arg
 
     idlist=()
-    for fn in `ls R1*.czi`
+    for fn in `ls R1_*.czi`
     do
         if [[ "$fn" =~ $pattern ]]
         then
