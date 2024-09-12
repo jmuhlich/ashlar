@@ -5,6 +5,7 @@ import skimage
 import skimage.restoration.uft
 import scipy.ndimage
 import numpy as np
+from . import transform
 
 
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
@@ -21,11 +22,14 @@ def whiten(img, sigma):
 
 @functools.lru_cache
 def get_window(shape):
-    # Build a 2D Hann window by taking the outer product of two 1-D windows.
-    wy = np.hanning(shape[0]).astype(np.float32)
-    wx = np.hanning(shape[1]).astype(np.float32)
-    window = np.outer(wy, wx)
-    return window
+    if isinstance(shape, int) or len(shape) == 1:
+        return np.hanning(shape).astype(np.float32)
+    else:
+        # Build a 2D Hann window by taking the outer product of two 1-D windows.
+        wy = np.hanning(shape[0]).astype(np.float32)
+        wx = np.hanning(shape[1]).astype(np.float32)
+        window = np.outer(wy, wx)
+        return window
 
 
 def window(img):
@@ -64,6 +68,38 @@ def register(img1, img2, sigma, upsample=10):
     else:
         error = np.inf
     return shift, error
+
+
+def register_angle(img1, img2, sigma, upsample=10):
+    p1w = whiten(reg_transform_polar(img1), sigma)
+    p2w = whiten(reg_transform_polar(img2), sigma)
+    shift = skimage.registration.phase_cross_correlation(
+        p1w,
+        p2w,
+        upsample_factor=upsample,
+        normalization=None,
+        return_error=False,
+    )
+    # The output of reg_transform_polar has ambiguous phase (+/- 180 degrees) in
+    # the polar axis due to the way it produces a shift-invariant image.  We
+    # expect the true angle to be close to zero, so we'll invert anything beyond
+    # +/-90 degrees.
+    angle = (shift[0] / p1w.shape[0] * 360 + 90) % 180 - 90
+    # skimage's warp_polar maps polar angle to the Y-axis in the opposite
+    # direction our math expects, so we need to flip the angle's sign.
+    angle = -angle
+    return angle
+
+
+def reg_transform_polar(img):
+    freq_mag = np.abs(np.fft.fft2(window(img)))
+    trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
+    pshape = (360 * 10, round(np.linalg.norm(img.shape) / 2))
+    polar_img = skimage.transform.warp_polar(
+        window(trans_inv_img), output_shape=pshape
+    )
+    polar_img = np.clip(polar_img, 0, None) * get_window(polar_img.shape[1])
+    return polar_img
 
 
 def nccw(img1, img2, sigma):
@@ -146,12 +182,17 @@ def fourier_shift(img, shift):
     return img_s.real
 
 
-def paste(target, img, pos, func=None):
+def paste(target, img, pos, angle, func=None):
     """Composite img into target."""
     pos = np.array(pos)
     # Bail out if destination region is out of bounds.
     if np.any(pos >= target.shape[:2]) or np.any(pos + img.shape[:2] < 0):
         return
+    if angle != 0:
+        orig_shape = img.shape
+        img = scipy.ndimage.rotate(img, angle)
+        shape_diff = np.subtract(img.shape, orig_shape)[:2]
+        pos -= shape_diff / 2
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
