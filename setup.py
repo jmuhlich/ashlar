@@ -18,6 +18,7 @@ requires = [
     'tifffile>=2023.3.15',
     'zarr>=2.11.3',
     'blessed>=1.17',
+    'pylibCZIrw>=3.5.0',
 ]
 
 
@@ -108,7 +109,8 @@ setup(
         'console_scripts': [
             'ashlar=ashlar.scripts.ashlar:main',
             'preview_slide=ashlar.scripts.preview_slide:main',
-            'make_alignment_movie=ashlar.scripts.make_alignment_movie:main'
+            'make_alignment_movie=ashlar.scripts.make_alignment_movie:main',
+            'czi2ashlar=ashlar.scripts.czi2ashlar:main'
         ]
     },
     classifiers=[
@@ -128,4 +130,5 @@ setup(
     download_url='%s/archive/v%s.tar.gz' % (HOMEPAGE, VERSION),
     keywords=['scripts', 'microscopy', 'registration', 'stitching'],
     zip_safe=False,
+    scripts=['ashlar/scripts/batch_czi2ashlar', 'ashlar/scripts/slurm_czi2ashlar'],
 )
