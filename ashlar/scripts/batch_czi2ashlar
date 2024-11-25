@@ -1,0 +1,35 @@
+#!/bin/bash
+
+pattern="^R([0-9]+)_([a-zA-Z0-9\-]+)\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?\.?([a-zA-Z0-9\-]+)?_?([a-zA-Z0-9]+)?_([a-zA-Z0-9\-_]+)\.czi$"
+
+for arg in "$@"
+do
+    echo "Processing slide: $arg"
+    cd $arg
+
+    idlist=()
+    for fn in `ls R0*.czi`
+    do
+        if [[ "$fn" =~ $pattern ]]
+        then
+            id=${BASH_REMATCH[6]}
+            echo "Found a sample with ID =  $id"
+            idlist+=($id )
+        else
+            echo "file $fn doesn't match the naming pattern"
+        fi
+    done
+
+    # run each id through czi2ashlar
+    for id in ${idlist[@]}
+    do
+        echo "Running sample ID =  $id"
+        infiles=`ls -v R*_${id}_*.czi | tr '\n' ' '`
+	echo "   files: " ${infiles}
+        outfile="${arg}_$id.ome.tif"
+        czi2ashlar -o $outfile ${infiles}
+    done
+    cd ..
+done
+echo "Done with all slides" 
+ 
