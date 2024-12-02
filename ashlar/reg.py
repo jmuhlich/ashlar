@@ -931,20 +931,11 @@ class LayerAligner(object):
         # max_shift_pixels away from the "prior" established by the linear model
         # fitted in the reference aligner. TODO finish this...
 
-        # For tiles containing only background, strong self-correlation of the
-        # camera sensor fixed-pattern noise will lead to a spurious alignment of
-        # 0,0 relative to the images themselves. 
-
-        # Compute alignment shift distances relative to the raw images.
-        diffs = np.linalg.norm(self.centers - self.reference_aligner_centers, axis=1)
-        # Round the diffs to one decimal point because the subpixel shifts are
-        # calculated by 10x upsampling and thus only accurate to that level.
-        diffs = np.rint(diffs * 10) / 10
-        ref_background = ~self.reference_aligner.foreground[self.reference_idx]
-        discard_noise = (diffs == 0) & ref_background
+        # Discard alignments on non-foreground tiles.
+        discard_background = ~self.reference_aligner.foreground[self.reference_idx]
         # Discard alignments with infinite error.
         discard_error = np.isinf(self.errors)
-        discard = discard_noise | discard_error
+        discard = discard_background | discard_error
 
         # For the high-quality alignments only, take the median of registered
         # shifts to determine the overall global offset (translation) from the
