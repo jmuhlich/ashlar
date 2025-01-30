@@ -1,5 +1,6 @@
+import functools
 import numpy as np
-from skimage.transform import warp
+from skimage.transform import warp, warp_coords
 
 
 def _barrel_mapping(xy, center, k):
@@ -15,6 +16,9 @@ def _barrel_mapping(xy, center, k):
     xy[..., 0] = x * f + x0
     xy[..., 1] = y * f + y0
     return xy
+
+
+_barrel_map_cache = {}
 
 
 def barrel_correction(
@@ -86,10 +90,25 @@ def barrel_correction(
         mode = "constant"
 
     if center is None:
-        center = np.array(image.shape)[:2] / 2
+        center = (image.shape[0] / 2, image.shape[1] / 2)
 
     warp_args = {"center": center, "k": k}
+    key = image.shape + tuple(warp_args.values())
+    # Cache coordinate maps as they are expensive to compute and we don't need
+    # many different ones.
+    try:
+        inverse_map = _barrel_map_cache[key]
+    except KeyError:
+        coord_map = functools.partial(_barrel_mapping, **warp_args)
+        inverse_map = _barrel_map_cache[key] = warp_coords(coord_map, image.shape)
 
-    return warp(image, _barrel_mapping, map_args=warp_args,
-                output_shape=output_shape, order=order, mode=mode, cval=cval,
-                clip=clip, preserve_range=preserve_range)
+    return warp(
+        image,
+        inverse_map,
+        output_shape=output_shape,
+        order=order,
+        mode=mode,
+        cval=cval,
+        clip=clip,
+        preserve_range=preserve_range,
+    )
