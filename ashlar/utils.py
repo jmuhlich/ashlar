@@ -78,8 +78,7 @@ def register_angle(img1, img2, sigma, upsample=10):
         p2w,
         upsample_factor=upsample,
         normalization=None,
-        return_error=False,
-    )
+    )[0]
     # The output of reg_transform_polar has ambiguous phase (+/- 180 degrees) in
     # the polar axis due to the way it produces a shift-invariant image.  We
     # expect the true angle to be close to zero, so we'll invert anything beyond
