@@ -931,11 +931,26 @@ class LayerAligner(object):
         # max_shift_pixels away from the "prior" established by the linear model
         # fitted in the reference aligner. TODO finish this...
 
-        # Discard alignments on non-foreground tiles.
-        discard_background = ~self.reference_aligner.foreground[self.reference_idx]
         # Discard alignments with infinite error.
-        discard_error = np.isinf(self.errors)
-        discard = discard_background | discard_error
+        self.discard_error = np.isinf(self.errors)
+        # In low-signal (background) tiles, the camera dark current image will
+        # dominate any true signal causing a spurious aligmnent at exactly 0,0
+        # with respect to the actual image dimensions. It's exceedingly unlikely
+        # to see such an alignment in real data, so we consider it a false
+        # positive and discard it. Rotation correction or gaussian filtering
+        # will destroy the dark current correlation, so in either of those cases
+        # we skip this step.
+        if self.cycle_angle == 0 and self.filter_sigma == 0:
+            position_diffs = np.absolute(
+                self.positions - self.reference_aligner_positions
+            )
+            # Round diffs to one decimal point because subpixel shifts are
+            # calculated by 10x upsampling and thus only accurate to that level.
+            position_diffs = np.rint(position_diffs * 10) / 10
+            self.discard_background = (position_diffs == 0).all(axis=1)
+        else:
+            self.discard_background = np.zeros(self.metadata.num_images, bool)
+        discard = self.discard_error | self.discard_background
 
         # For the high-quality alignments only, take the median of registered
         # shifts to determine the overall global offset (translation) from the
@@ -944,20 +959,30 @@ class LayerAligner(object):
             offset = 0
         else:
             offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
+        # Recompute corrected nominal centers with refined rotation angle.
+        # TODO: Maybe refactor this to eliminate copy-paste duplication from
+        # above code in coarse_align.
+        mcenter = self.metadata.center
+        tform = skimage.transform.AffineTransform(
+            rotation=np.deg2rad(self.cycle_angle),
+        )
+        corrected_nominal_centers = (
+            tform(self.metadata.centers - mcenter) + mcenter + self.cycle_offset
+        )
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the rotation and the extra offset we
         # just computed.
         predictions = self.reference_aligner.lr.predict(
-            self.corrected_nominal_centers
+            corrected_nominal_centers
         )
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.centers - predictions - offset, axis=1)
-        extremes = distance > self.max_shift_pixels
-        # Recalculate the mean shift, also ignoring the extreme values.
-        discard |= extremes
+        self.discard_shift = distance > self.max_shift_pixels
+        discard |= self.discard_shift
         self.discard = discard
 
+        # Recalculate the mean shift, also ignoring the extreme values.
         if discard.all():
             self.offset = 0
         else:
