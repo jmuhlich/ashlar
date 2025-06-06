@@ -942,7 +942,7 @@ class LayerAligner(object):
         # we skip this step.
         if self.cycle_angle == 0 and self.filter_sigma == 0:
             position_diffs = np.absolute(
-                self.positions - self.reference_aligner_positions
+                self.centers - self.reference_aligner_centers
             )
             # Round diffs to one decimal point because subpixel shifts are
             # calculated by 10x upsampling and thus only accurate to that level.
