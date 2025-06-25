@@ -10,7 +10,7 @@ import tifffile
 def calculate_scale(reader, default_scale=0.05, min_size=1000):
     """Return scaling factor for a thumbnail with a minimum size constraint."""
     positions = reader.metadata.positions - reader.metadata.origin
-    full_shape = (positions + reader.metadata.size).max(axis=0)
+    full_shape = np.nanmax(positions + reader.metadata.size, axis=0)
     thumbnail_shape = full_shape * default_scale
     if any(thumbnail_shape >= min_size):
         scale = default_scale
@@ -23,13 +23,15 @@ def calculate_scale(reader, default_scale=0.05, min_size=1000):
 
 def make_thumbnail(reader, channel=0, scale=0.05):
     positions = reader.metadata.positions - reader.metadata.origin
-    full_shape = (positions + reader.metadata.size).max(axis=0)
+    full_shape = np.nanmax(positions + reader.metadata.size, axis=0)
     mshape = np.ceil(full_shape * scale).astype(int)
     mosaic = np.zeros(mshape, dtype=np.uint16)
     total = reader.metadata.num_images
     for i, pos_s in enumerate(positions * scale):
         sys.stdout.write("\r    assembling thumbnail %d/%d" % (i + 1, total))
         sys.stdout.flush()
+        if np.isnan(pos_s).any():
+            continue
         img = reader.read(c=channel, series=i)
         # We don't need anti-aliasing as long as the coarse features in the
         # images are bigger than the scale factor. This speeds up the rescaling

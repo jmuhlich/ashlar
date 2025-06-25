@@ -115,7 +115,7 @@ class Metadata(object):
 
     @property
     def origin(self):
-        return self.positions.min(axis=0)
+        return np.nanmin(self.positions, axis=0)
 
 
 class PlateMetadata(Metadata):
@@ -362,7 +362,7 @@ class BioformatsMetadata(PlateMetadata):
                 warn_data(
                     "Stage coordinates undefined; falling back to (0, 0)."
                 )
-                values = [0.0, 0.0]
+                values = [np.nan, np.nan]
                 break
             else:
                 v = v_units.value(UNITS.MICROMETER)
@@ -707,10 +707,12 @@ class EdgeAligner(object):
             nodes = list(cc)
             centroid_m = np.mean(self.metadata.positions[nodes], axis=0)
             centroid_f = np.mean(self.positions[nodes], axis=0)
+            if np.isnan(centroid_m).any() or np.isnan(centroid_f).any():
+                continue
             shift = self.lr.predict([centroid_m])[0] - centroid_f
             self.positions[nodes] += shift
         # Adjust positions and model intercept to put origin at 0,0.
-        self.origin = self.positions.min(axis=0)
+        self.origin = np.nanmin(self.positions, axis=0)
         self.positions -= self.origin
         self.lr.intercept_ -= self.origin
         self.centers = self.positions + self.metadata.size / 2
@@ -791,7 +793,7 @@ class EdgeAligner(object):
     @property
     def mosaic_shape(self):
         upper_corners = self.positions + self.metadata.size
-        max_dimensions = upper_corners.max(axis=0)
+        max_dimensions = np.nanmax(upper_corners, axis=0)
         return tuple(map(int, np.ceil(max_dimensions)))
 
     def debug(self, t1, t2, min_size=0):
@@ -879,9 +881,15 @@ class LayerAligner(object):
         reference_positions = self.reference_aligner.metadata.positions
         dist = scipy.spatial.distance.cdist(reference_positions,
                                             self.corrected_nominal_positions)
+        dist[np.isnan(dist)] = np.inf
         self.reference_idx = np.argmin(dist, 0)
-        self.reference_positions = reference_positions[self.reference_idx]
-        self.reference_aligner_positions = self.reference_aligner.positions[self.reference_idx]
+        keep = ~np.isnan(self.metadata.positions).any(axis=1)[:, None]
+        self.reference_positions = np.where(
+            keep, reference_positions[self.reference_idx], np.nan
+        )
+        self.reference_aligner_positions = np.where(
+            keep, self.reference_aligner.positions[self.reference_idx], np.nan
+        )
 
     def register_all(self):
         n = self.metadata.num_images
@@ -891,7 +899,11 @@ class LayerAligner(object):
             if self.verbose:
                 sys.stdout.write("\r    aligning tile %d/%d" % (i + 1, n))
                 sys.stdout.flush()
-            shift, error = self.register(i)
+            if np.isnan(self.reference_positions[i]).any():
+                shift = [np.nan, np.nan]
+                error = np.inf
+            else:
+                shift, error = self.register(i)
             self.shifts[i] = shift
             self.errors[i] = error
         if self.verbose:
@@ -929,7 +941,12 @@ class LayerAligner(object):
             offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the extra offset we just computed.
-        predictions = self.reference_aligner.lr.predict(self.corrected_nominal_positions)
+        predictions = np.empty_like(self.positions)
+        pos_valid = ~np.isnan(self.positions).any(axis=1)
+        predictions[pos_valid] = self.reference_aligner.lr.predict(
+            self.corrected_nominal_positions[pos_valid]
+        )
+        predictions[~pos_valid] = np.nan
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
@@ -1148,6 +1165,8 @@ class Mosaic(object):
             if self.verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
+            if np.isnan(position).any():
+                continue
             img = self.aligner.reader.read(c=channel, series=si)
             img = self.correct_illumination(img, channel)
             utils.paste(out, img, position, func=self.pastefunc)
@@ -1529,7 +1548,12 @@ def plot_layer_quality(
     draw_mosaic_image(ax, aligner, img, **im_kwargs)
 
     h, w = aligner.metadata.size
-    positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
+    valid = ~np.isnan(aligner.positions).any(axis=1)
+    positions = aligner.positions[valid]
+    centers = aligner.centers[valid]
+    shifts = aligner.shifts[valid]
+    discard = aligner.discard[valid]
+    errors = aligner.errors[valid]
 
     if scale != 1.0:
         h, w, positions, centers, shifts = [
@@ -1538,7 +1562,7 @@ def plot_layer_quality(
 
     # Bounding boxes denoting new tile positions.
     color_index = skimage.exposure.rescale_intensity(
-        aligner.errors, out_range=np.uint8
+        errors, out_range=np.uint8
     ).astype(np.uint8)
     color_map = mcm.magma_r
     for xy, c_idx in zip(np.fliplr(positions), color_index):
@@ -1548,8 +1572,9 @@ def plot_layer_quality(
         ax.add_patch(rect)
     
     # Annotate tile numbering.
+    idxs = np.nonzero(valid)[0]
     if annotate:
-        for idx, (x, y) in enumerate(np.fliplr(positions)):
+        for idx, (x, y) in zip(idxs, np.fliplr(positions)):
             text = plt.annotate(str(idx), (x+0.1*w, y+0.9*h), alpha=0.7)
             # Add outline to text for better contrast in different background color.
             text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAA')
@@ -1559,13 +1584,13 @@ def plot_layer_quality(
 
     if artist == 'quiver':
         ax.quiver(
-            *centers.T[::-1], *shifts.T[::-1], aligner.discard,
+            *centers.T[::-1], *shifts.T[::-1], discard,
             units='dots', width=2, scale=1, scale_units='xy', angles='xy',
             cmap='Greys'
         )
     if artist == 'patches':
         for xy, dxy, is_discarded in zip(
-            np.fliplr(centers), np.fliplr(shifts), aligner.discard
+            np.fliplr(centers), np.fliplr(shifts), discard
         ):
             arrow = mpatches.FancyArrowPatch(
                 xy, np.array(xy) + np.array(dxy), 
