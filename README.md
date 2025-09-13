@@ -14,6 +14,11 @@ images.
 
 **Visit [labsyspharm.github.io/ashlar/](https://labsyspharm.github.io/ashlar/) for the most up-to-date information on ASHLAR.**
 
+## CZI2ASHLAR
+A wrapper around the customized ASHLAR package to interpret OHSU-style cycIF files in CZI format from the Zeiss Axioscan scanner. It extracts metadata which gets injected into the ome.tif file by this ASHLAR fork.<br>
+See:  https://github.com/dsudar/ashlar/blob/rotcor_metadata/docs/czi2ashlar.md for instructions.<br>
+
+
 ## Usage
 
 ```
@@ -72,6 +77,14 @@ optional arguments:
                         cycles or one file for every cycle. Channel counts
                         must match input files. (default: no dark field
                         correction)
+  --metadata PATH       Add Channel/Plane level metadata from a CSV file into
+                        the resulting OME-TIFF file. The CSV file format:
+                        Channel#  Name   ExposureTime    ExposureTimeUnit   Fluor  etc.
+                        0         DAPI   20              ms                 DAPI   more columns for future use
+                        1         Chan1  100             ms                 FITC   ...
+                        2         Chan2  240             ms                 AF555  ...
+                        3         Chan3  150             ms                 Cy5    ...
+                        ...       ...    ...             ...                ...    ...
   --plates              Enable plate mode for HTS data
   -q, --quiet           Suppress progress display
   --version             Show program's version number and exit

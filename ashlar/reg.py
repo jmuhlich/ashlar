@@ -1,10 +1,12 @@
 import sys
 import math
 import warnings
+import os
 import xml.etree.ElementTree
 import pathlib
 import jnius_config
 import numpy as np
+import scipy.ndimage
 import scipy.spatial.distance
 import scipy.fft
 import skimage.util
@@ -406,6 +408,9 @@ class BioformatsReader(PlateReader):
 
     def read(self, series, c):
         self.metadata._reader.setSeries(self.metadata.active_series[series])
+        # if c is out of range, assume that last channel was intended
+        if c < 0 or c > self.metadata.num_channels - 1:
+            c = self.metadata.num_channels - 1
         index = self.metadata._reader.getIndex(0, c, 0)
         byte_array = self.metadata._reader.openBytes(index)
         endian = "<" if self.metadata._reader.isLittleEndian() else ">"
@@ -839,6 +844,7 @@ class LayerAligner(object):
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.filter_sigma = filter_sigma
         self.verbose = verbose
+        self.cycle_angle_fine = 0
         # FIXME Still a bit muddled here on the use of metadata positions vs.
         # corrected positions from the reference aligner. We probably want to
         # use metadata positions to find the cycle-to-cycle tile
@@ -861,20 +867,34 @@ class LayerAligner(object):
         )
 
     def coarse_align(self):
-        self.cycle_offset = thumbnail.calculate_cycle_offset(
+        self.cycle_offset, self.cycle_angle = thumbnail.align_cycles(
             self.reference_aligner.reader,
             self.reader,
             scale=self.reference_aligner.reader.thumbnail_scale,
         )
-        self.corrected_nominal_positions = self.metadata.positions + self.cycle_offset
-        reference_positions = self.reference_aligner.metadata.positions
-        dist = scipy.spatial.distance.cdist(reference_positions,
-                                            self.corrected_nominal_positions)
-        self.reference_idx = np.argmin(dist, 0)
-        self.reference_positions = reference_positions[self.reference_idx]
-        self.reference_aligner_positions = self.reference_aligner.positions[self.reference_idx]
+        mcorners = [
+            np.min(self.metadata.centers, axis=0),
+            np.max(self.metadata.centers, axis=0),
+        ]
+        mcenter = np.mean(mcorners, axis=0)
+        tform = skimage.transform.AffineTransform(
+            rotation=np.deg2rad(self.cycle_angle),
+        )
+        self.corrected_nominal_centers = (
+            tform(self.metadata.centers - mcenter) + mcenter + self.cycle_offset
+        )
+        reference_centers = self.reference_aligner.metadata.centers
+        # For small rotation angles we can use the distance between tile centers
+        # instead of computing the actual overlap between rotated rectangles.
+        dist = scipy.spatial.distance.cdist(reference_centers,
+                                            self.corrected_nominal_centers)
+        self.reference_idx = np.argmin(dist, axis=0)
+        self.reference_centers = reference_centers[self.reference_idx]
+        self.reference_aligner_centers = self.reference_aligner.centers[self.reference_idx]
 
     def register_all(self):
+        if self.cycle_angle != 0:
+            self.refine_cycle_angle()
         n = self.metadata.num_images
         self.shifts = np.empty((n, 2))
         self.errors = np.empty(n)
@@ -889,27 +909,27 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = (
-            self.corrected_nominal_positions
+        self.centers = (
+            self.corrected_nominal_centers
             + self.shifts
-            + self.reference_aligner_positions
-            - self.reference_positions
+            + self.reference_aligner_centers
+            - self.reference_centers
         )
-        self.constrain_positions()
-        self.centers = self.positions + self.metadata.size / 2
+        self.constrain_centers()
+        self.positions = self.centers - self.metadata.size / 2
 
-    def constrain_positions(self):
-        position_diffs = np.absolute(
-            self.positions - self.reference_aligner_positions
+    def constrain_centers(self):
+        diffs = np.absolute(
+            self.centers - self.reference_aligner_centers
         )
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling and thus only accurate to that level.
-        position_diffs = np.rint(position_diffs * 10) / 10
+        diffs = np.rint(diffs * 10) / 10
         # Discard camera background registration which will shift target
         # positions to reference aligner positions, due to strong
         # self-correlation of the sensor dark current pattern which dominates in
         # low-signal images.
-        discard = (position_diffs == 0).all(axis=1)
+        discard = (diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
         discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
@@ -919,11 +939,14 @@ class LayerAligner(object):
         else:
             offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
-        # still appropriate, apart from the extra offset we just computed.
-        predictions = self.reference_aligner.lr.predict(self.corrected_nominal_positions)
+        # still appropriate, apart from the rotation and the extra offset we
+        # just computed.
+        predictions = self.reference_aligner.lr.predict(
+            self.corrected_nominal_centers
+        )
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
-        distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
+        distance = np.linalg.norm(self.centers - predictions - offset, axis=1)
         max_dist = self.max_shift_pixels
         extremes = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
@@ -934,7 +957,7 @@ class LayerAligner(object):
         else:
             self.offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
         # Fill in discarded shifts from the predictions.
-        self.positions[discard] = predictions[discard] + self.offset
+        self.centers[discard] = predictions[discard] + self.offset
 
     def register(self, t):
         """Return relative shift between images and the alignment error."""
@@ -943,14 +966,40 @@ class LayerAligner(object):
             return (0, 0), np.inf
         shift, error = utils.register(ref_img, img, self.filter_sigma)
         # Add back in the fractional position difference that overlap() loses.
+        # TODO How does rotation affect this?
         shift = tuple(shift + its.offset_diff_frac)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
 
+    def register_angle(self, t):
+        """Return relative rotation angle between images."""
+        its, ref_img, img = self.overlap(t)
+        if np.any(np.array(its.shape) == 0):
+            return np.nan
+        angle = utils.register_angle(ref_img, img, self.filter_sigma)
+        return angle
+
+    def refine_cycle_angle(self):
+        n = self.metadata.num_images
+        angles = np.empty(n)
+        for i in range(n):
+            if self.verbose:
+                sys.stdout.write("\r    aligning tile angle %d/%d" % (i + 1, n))
+                sys.stdout.flush()
+            angles[i] = self.register_angle(i)
+        if self.verbose:
+            print()
+        angle = np.nanmedian(angles)
+        if self.verbose:
+            print(f"    refined cycle rotation = {angle:.2f} degrees")
+        self.cycle_angle_fine = angle
+        self.tform_rotation = skimage.transform.AffineTransform(rotation=angle)
+
     def intersection(self, t):
-        corners1 = np.vstack([self.reference_positions[t],
-                              self.corrected_nominal_positions[t]])
+        center_a = self.reference_centers[t]
+        center_b = self.corrected_nominal_centers[t]
+        corners1 = np.vstack([center_a, center_b]) - self.reader.metadata.size / 2
         corners2 = corners1 + self.reader.metadata.size
         its = Intersection(corners1, corners2)
         its.shape = its.shape // 32 * 32
@@ -963,6 +1012,10 @@ class LayerAligner(object):
             series=ref_t, c=self.reference_aligner.channel
         )
         img2 = self.reader.read(series=t, c=self.channel)
+        if self.cycle_angle_fine != 0:
+            img2 = scipy.ndimage.rotate(
+                img2, self.cycle_angle_fine, reshape=False
+            )
         # crop rounds the offsets to the nearest pixel, so the returned images
         # are not located at these precise locations.
         # Intersection.offset_diff_frac contains the difference.
@@ -997,7 +1050,7 @@ class LayerAligner(object):
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin - its.offset_diff_frac
         plt.plot(shift[1], shift[0], 'rx')
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class Intersection(object):
@@ -1134,13 +1187,14 @@ class Mosaic(object):
                     f"out array shape {out.shape} does not match Mosaic"
                     f" shape {self.shape}"
                 )
+        angle = getattr(self.aligner, "cycle_angle_fine", 0)
         for si, position in enumerate(self.aligner.positions):
             if self.verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
             img = self.aligner.reader.read(c=channel, series=si)
             img = self.correct_illumination(img, channel)
-            utils.paste(out, img, position, func=utils.pastefunc_blend)
+            utils.paste(out, img, position, angle, func=utils.pastefunc_blend)
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
             for i in range(len(out)):
@@ -1164,7 +1218,7 @@ class Mosaic(object):
 class PyramidWriter:
 
     def __init__(
-        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
+        self, mosaics, path, metadata_list, scale=2, tile_size=1024, peak_size=1024, verbose=False
     ):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
@@ -1176,6 +1230,7 @@ class PyramidWriter:
         self.tile_size = tile_size
         self.peak_size = peak_size
         self.verbose = verbose
+        self.metadata_list = metadata_list
 
     @property
     def ref_mosaic(self):
@@ -1270,17 +1325,45 @@ class PyramidWriter:
         pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
         resolution_cm = 10000 / pixel_size
         software = f"Ashlar v{_version}"
+        image_name = os.path.basename(self.path)
         metadata = {
             "Creator": software,
             "Pixels": {
+                "Name": image_name,
                 "PhysicalSizeX": pixel_size, "PhysicalSizeXUnit": "\u00b5m",
-                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
+                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m",
             },
         }
+        if self.metadata_list:
+            #TODO add significant error handling
+            # create Channel entry and fill it
+            metadata["Pixels"]["Channel"] = {}
+            metadata["Pixels"]["Channel"]["Name"] = [ sub['Name'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["Fluor"] = [ sub['Fluor'] for sub in self.metadata_list ]
+            col_list = [ sub['Color'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["Color"] = [ int.from_bytes(bytes.fromhex(i[1:]), byteorder="big", signed=True) for i in col_list ]
+            metadata["Pixels"]["Channel"]["PockelCellSetting"] = [ sub['Cycle'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["AcquisitionMode"] = [ sub['AcquisitionMode'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["IlluminationType"] = [ sub['IlluminationType'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["ContrastMethod"] = [ sub['ContrastMethod'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["ExcitationWavelength"] = [ sub['ExcitationWavelength'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["ExcitationWavelengthUnit"] = [ sub['ExcitationWavelengthUnit'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["EmissionWavelength"] = [ sub['EmissionWavelength'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Channel"]["EmissionWavelengthUnit"] = [ sub['EmissionWavelengthUnit'] for sub in self.metadata_list ]
+
+            # create Plane entry and fill it
+            metadata["Pixels"]["Plane"] = {}
+            metadata["Pixels"]["Plane"]["ExposureTime"] = [ sub['ExposureTime'] for sub in self.metadata_list ]
+            metadata["Pixels"]["Plane"]["ExposureTimeUnit"] = [ sub['ExposureTimeUnit'] for sub in self.metadata_list ]
+
+            # create private TIFF tag to indicate what the PockelCellSetting actually encodes, in this case it encodes Cycle info
+            extratags = [(44444, 's', 0, "cycle", True)]
+
         with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
             tiff.write(
                 data=self.base_tiles(),
                 metadata=metadata,
+                extratags=extratags,
                 software=software.encode("utf-8"),
                 shape=self.level_full_shapes[0],
                 subifds=int(self.num_levels - 1),
@@ -1314,12 +1397,14 @@ class PyramidWriter:
 
 class TiffListWriter:
 
-    def __init__(self, mosaics, path_format, verbose=False):
+    def __init__(self, mosaics, path_format, metadata_list, verbose=False):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
         self.mosaics = mosaics
         self.path_format = path_format
         self.verbose = verbose
+        # nothing happens with the metadataList info yet
+        self.metadata_list = metadata_list
 
     def run(self):
         pixel_size = self.mosaics[0].aligner.metadata.pixel_size
