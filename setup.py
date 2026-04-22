@@ -43,8 +43,8 @@ AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
-BIOFORMATS_JAR_URL = 'https://downloads.openmicroscopy.org/bio-formats/8.0.1/artifacts/bioformats_package.jar'
-BIOFORMATS_JAR_SHA256 = '8c7557a9357a83bf40272292fbd676beb466a9a8bab34126e92a49d636c64bc2'
+BIOFORMATS_JAR_URL = 'https://downloads.openmicroscopy.org/bio-formats/8.5.0/artifacts/bioformats_package.jar'
+BIOFORMATS_JAR_SHA256 = 'c6e60665d53a334b66e4d635340151f403dfe57a64704c573dd4c03b873befb9'
 
 def download_bioformats():
     print("Ensuring latest bioformats is present:")
